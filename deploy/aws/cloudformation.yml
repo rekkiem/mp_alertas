@@ -1,0 +1,455 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  MP Alertas — Despliegue en AWS ECS Fargate con RDS PostgreSQL, 
+  Application Load Balancer y Secrets Manager.
+
+# ── Parámetros ────────────────────────────────────────────────────────────────
+Parameters:
+  AppName:
+    Type: String
+    Default: mp-alertas
+    Description: Nombre base para los recursos
+
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues: [production, staging]
+
+  DockerImage:
+    Type: String
+    Description: "URI de la imagen Docker en ECR (ej: 123456789.dkr.ecr.us-east-1.amazonaws.com/mp-alertas:latest)"
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC donde se desplegará la aplicación
+
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Subnets públicas (mínimo 2, en distintas AZ)
+
+  PrivateSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Subnets privadas para RDS
+
+  CertificateArn:
+    Type: String
+    Description: ARN del certificado ACM para HTTPS (dejar vacío para HTTP only)
+    Default: ""
+
+  DbPassword:
+    Type: String
+    NoEcho: true
+    Description: Contraseña para la BD PostgreSQL (mínimo 16 caracteres)
+    MinLength: 16
+
+  DashboardPass:
+    Type: String
+    NoEcho: true
+    Description: Contraseña del dashboard web
+
+  TicketMercadoPublico:
+    Type: String
+    NoEcho: true
+    Description: Ticket de API de Mercado Público
+
+  SmtpPassword:
+    Type: String
+    NoEcho: true
+    Description: Contraseña SMTP
+
+  SmtpHost:
+    Type: String
+    Default: smtp.gmail.com
+
+  SmtpUser:
+    Type: String
+    Description: Usuario SMTP (email)
+
+  AdminEmail:
+    Type: String
+    Description: Email del administrador (resúmenes diarios)
+
+  ContainerCpu:
+    Type: Number
+    Default: 256
+    AllowedValues: [256, 512, 1024, 2048]
+
+  ContainerMemory:
+    Type: Number
+    Default: 512
+    AllowedValues: [512, 1024, 2048, 4096]
+
+Conditions:
+  HasCertificate: !Not [!Equals [!Ref CertificateArn, ""]]
+
+# ── Recursos ──────────────────────────────────────────────────────────────────
+Resources:
+
+  # ── Secrets Manager ─────────────────────────────────────────────────────────
+  AppSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${AppName}/${Environment}/config"
+      Description: Configuración sensible de MP Alertas
+      SecretString: !Sub |
+        {
+          "TICKET_MERCADO_PUBLICO": "${TicketMercadoPublico}",
+          "DASHBOARD_PASS":         "${DashboardPass}",
+          "SMTP_PASSWORD":          "${SmtpPassword}",
+          "SECRET_KEY":             "${AWS::StackId}",
+          "DB_PASSWORD":            "${DbPassword}"
+        }
+
+  # ── ECR Repository ──────────────────────────────────────────────────────────
+  EcrRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Ref AppName
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [{
+              "rulePriority": 1,
+              "description": "Retener últimas 5 imágenes",
+              "selection": {"tagStatus": "any", "countType": "imageCountMoreThan", "countNumber": 5},
+              "action": {"type": "expire"}
+            }]
+          }
+
+  # ── IAM Role para ECS Task ───────────────────────────────────────────────────
+  EcsTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AppName}-ecs-execution-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: SecretsAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - kms:Decrypt
+                Resource: !Ref AppSecret
+
+  EcsTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AppName}-ecs-task-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AppPermissions
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt LogGroup.Arn
+
+  # ── RDS PostgreSQL ───────────────────────────────────────────────────────────
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: !Sub "Subnets para ${AppName} RDS"
+      SubnetIds: !Ref PrivateSubnetIds
+
+  DbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "SG para ${AppName} RDS"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref AppSecurityGroup
+
+  RdsInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier: !Sub "${AppName}-db"
+      DBName: mp_alertas
+      DBInstanceClass: db.t3.micro
+      Engine: postgres
+      EngineVersion: "16.1"
+      MasterUsername: mp_user
+      MasterUserPassword: !Ref DbPassword
+      AllocatedStorage: "20"
+      StorageType: gp3
+      StorageEncrypted: true
+      MultiAZ: false          # Cambiar a true en producción crítica
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      VPCSecurityGroups:
+        - !Ref DbSecurityGroup
+      BackupRetentionPeriod: 7
+      DeletionProtection: true
+      Tags:
+        - Key: App
+          Value: !Ref AppName
+
+  # ── EFS para persistencia SQLite (alternativa a RDS) ─────────────────────────
+  # Descomenta si prefieres SQLite en EFS en lugar de RDS
+  # EfsFileSystem:
+  #   Type: AWS::EFS::FileSystem
+  #   Properties:
+  #     Encrypted: true
+  #     PerformanceMode: generalPurpose
+
+  # ── Security Groups ──────────────────────────────────────────────────────────
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "SG para ${AppName} ALB"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+
+  AppSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "SG para ${AppName} ECS Tasks"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5000
+          ToPort: 5000
+          SourceSecurityGroupId: !Ref AlbSecurityGroup
+
+  # ── Application Load Balancer ────────────────────────────────────────────────
+  Alb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub "${AppName}-alb"
+      Type: application
+      Scheme: internet-facing
+      SecurityGroups:
+        - !Ref AlbSecurityGroup
+      Subnets: !Ref SubnetIds
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: "60"
+        - Key: access_logs.s3.enabled
+          Value: "false"
+
+  AlbTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub "${AppName}-tg"
+      Port: 5000
+      Protocol: HTTP
+      VpcId: !Ref VpcId
+      TargetType: ip
+      HealthCheckPath: /
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      Matcher:
+        HttpCode: "200,401"    # 401 es OK (necesita auth)
+
+  AlbListenerHttp:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref Alb
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - !If
+          - HasCertificate
+          - Type: redirect
+            RedirectConfig:
+              Protocol: HTTPS
+              Port: "443"
+              StatusCode: HTTP_301
+          - Type: forward
+            TargetGroupArn: !Ref AlbTargetGroup
+
+  AlbListenerHttps:
+    Condition: HasCertificate
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref Alb
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Ref CertificateArn
+      SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref AlbTargetGroup
+
+  # ── CloudWatch Log Group ─────────────────────────────────────────────────────
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/${AppName}"
+      RetentionInDays: 30
+
+  # ── ECS Cluster ──────────────────────────────────────────────────────────────
+  EcsCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub "${AppName}-cluster"
+      ClusterSettings:
+        - Name: containerInsights
+          Value: enabled
+
+  # ── ECS Task Definition ──────────────────────────────────────────────────────
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub "${AppName}-task"
+      Cpu: !Ref ContainerCpu
+      Memory: !Ref ContainerMemory
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !GetAtt EcsTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt EcsTaskRole.Arn
+      ContainerDefinitions:
+        - Name: !Ref AppName
+          Image: !Ref DockerImage
+          Essential: true
+          PortMappings:
+            - ContainerPort: 5000
+              Protocol: tcp
+          Environment:
+            - Name: DATABASE_URL
+              Value: !Sub
+                - "postgresql://mp_user:${DbPassword}@${DbEndpoint}:5432/mp_alertas"
+                - DbEndpoint: !GetAtt RdsInstance.Endpoint.Address
+            - Name: SMTP_HOST
+              Value: !Ref SmtpHost
+            - Name: SMTP_USER
+              Value: !Ref SmtpUser
+            - Name: SMTP_FROM
+              Value: !Ref SmtpUser
+            - Name: SMTP_PORT
+              Value: "587"
+            - Name: SMTP_USE_TLS
+              Value: "true"
+            - Name: ADMIN_EMAIL
+              Value: !Ref AdminEmail
+            - Name: DASHBOARD_USER
+              Value: admin
+            - Name: TIMEZONE
+              Value: America/Santiago
+            - Name: APP_BASE_URL
+              Value: !Sub "https://${Alb.DNSName}"
+            - Name: PORT
+              Value: "5000"
+          Secrets:
+            - Name: TICKET_MERCADO_PUBLICO
+              ValueFrom: !Sub "${AppSecret}:TICKET_MERCADO_PUBLICO::"
+            - Name: DASHBOARD_PASS
+              ValueFrom: !Sub "${AppSecret}:DASHBOARD_PASS::"
+            - Name: SMTP_PASSWORD
+              ValueFrom: !Sub "${AppSecret}:SMTP_PASSWORD::"
+            - Name: SECRET_KEY
+              ValueFrom: !Sub "${AppSecret}:SECRET_KEY::"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+          HealthCheck:
+            Command:
+              - CMD-SHELL
+              - "curl -f -u admin:${DASHBOARD_PASS} http://localhost:5000/ || exit 1"
+            Interval: 30
+            Timeout: 10
+            Retries: 3
+            StartPeriod: 30
+
+  # ── ECS Service ──────────────────────────────────────────────────────────────
+  EcsService:
+    Type: AWS::ECS::Service
+    DependsOn:
+      - AlbListenerHttp
+    Properties:
+      ServiceName: !Sub "${AppName}-service"
+      Cluster: !Ref EcsCluster
+      TaskDefinition: !Ref TaskDefinition
+      DesiredCount: 1            # Una sola tarea (scheduler singleton)
+      LaunchType: FARGATE
+      PlatformVersion: LATEST
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - !Ref AppSecurityGroup
+          Subnets: !Ref SubnetIds
+      LoadBalancers:
+        - ContainerName: !Ref AppName
+          ContainerPort: 5000
+          TargetGroupArn: !Ref AlbTargetGroup
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+      DeploymentController:
+        Type: ECS
+      Tags:
+        - Key: App
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+
+# ── Outputs ───────────────────────────────────────────────────────────────────
+Outputs:
+  DashboardUrl:
+    Description: URL del dashboard
+    Value: !Sub
+      - "${Protocol}://${AlbDns}"
+      - Protocol: !If [HasCertificate, https, http]
+        AlbDns: !GetAtt Alb.DNSName
+
+  EcrRepositoryUri:
+    Description: URI del repositorio ECR
+    Value: !GetAtt EcrRepository.RepositoryUri
+
+  RdsEndpoint:
+    Description: Endpoint de la base de datos
+    Value: !GetAtt RdsInstance.Endpoint.Address
+
+  SecretArn:
+    Description: ARN del secreto en Secrets Manager
+    Value: !Ref AppSecret
+
+  ClusterName:
+    Description: Nombre del cluster ECS
+    Value: !Ref EcsCluster
+
+  ServiceName:
+    Description: Nombre del servicio ECS
+    Value: !GetAtt EcsService.Name

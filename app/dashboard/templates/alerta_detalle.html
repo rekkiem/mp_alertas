@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+{% block title %}Alerta #{{ alerta.id }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  .back-link {
+    display: inline-flex; align-items: center; gap: 6px;
+    color: var(--text-muted); text-decoration: none; font-size: 13px;
+    margin-bottom: 20px; transition: color .15s;
+  }
+  .back-link:hover { color: var(--accent); }
+
+  .detail-grid {
+    display: grid; grid-template-columns: 1fr 320px; gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .detail-grid { grid-template-columns: 1fr; }
+  }
+
+  /* ── Main card ── */
+  .detail-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); overflow: hidden;
+  }
+  .detail-header {
+    padding: 20px 24px; border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  }
+  .detail-title {
+    font-size: 17px; font-weight: 700; color: var(--text); line-height: 1.4;
+  }
+  .detail-codigo {
+    font-family: var(--font-mono); font-size: 12px;
+    color: var(--text-muted); margin-top: 4px;
+  }
+
+  .tipo-badge-lg {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 10px; border-radius: 5px;
+    font-family: var(--font-mono); font-size: 11px;
+    font-weight: 600; text-transform: uppercase; letter-spacing: .5px;
+    white-space: nowrap; flex-shrink: 0;
+  }
+  .tipo-licitacion { background: var(--info-dim); color: var(--info); border: 1px solid rgba(88,166,255,.25); }
+  .tipo-orden_compra { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(230,168,23,.25); }
+  .tipo-compra_agil { background: var(--accent-2-dim); color: var(--accent-2); border: 1px solid rgba(63,185,80,.25); }
+
+  .detail-body { padding: 0; }
+
+  /* ── Field rows ── */
+  .field-row {
+    display: flex; align-items: baseline; gap: 16px;
+    padding: 13px 24px; border-bottom: 1px solid var(--border);
+  }
+  .field-row:last-child { border-bottom: none; }
+  .field-label {
+    font-family: var(--font-mono); font-size: 11px;
+    color: var(--text-muted); text-transform: uppercase;
+    letter-spacing: .5px; min-width: 140px; flex-shrink: 0;
+  }
+  .field-value {
+    font-size: 13px; color: var(--text); flex: 1; word-break: break-word;
+  }
+  .field-value.mono { font-family: var(--font-mono); }
+  .field-value.monto {
+    font-family: var(--font-mono); color: var(--accent-2);
+    font-size: 15px; font-weight: 600;
+  }
+  .field-value.link a {
+    color: var(--accent); text-decoration: none; word-break: break-all;
+  }
+  .field-value.link a:hover { text-decoration: underline; }
+
+  /* ── Sidebar ── */
+  .sidebar-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); overflow: hidden;
+  }
+  .sidebar-section-title {
+    padding: 12px 16px; background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+    font-family: var(--font-mono); font-size: 11px;
+    text-transform: uppercase; letter-spacing: .6px;
+    color: var(--text-muted);
+  }
+  .sidebar-row {
+    display: flex; flex-direction: column; gap: 3px;
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+  }
+  .sidebar-row:last-child { border-bottom: none; }
+  .sidebar-label {
+    font-family: var(--font-mono); font-size: 10px;
+    text-transform: uppercase; letter-spacing: .4px; color: var(--text-dim);
+  }
+  .sidebar-value { font-size: 13px; color: var(--text); }
+  .sidebar-value.mono { font-family: var(--font-mono); }
+
+  /* ── Status badge ── */
+  .status-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 9px; border-radius: 4px; font-size: 12px; font-family: var(--font-mono);
+  }
+  .status-ok { background: var(--accent-2-dim); color: var(--accent-2); border: 1px solid rgba(63,185,80,.2); }
+  .status-pending { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(230,168,23,.2); }
+
+  /* ── Raw JSON viewer ── */
+  .json-viewer {
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px;
+    font-family: var(--font-mono); font-size: 11px;
+    color: var(--text-muted); line-height: 1.6;
+    white-space: pre-wrap; word-break: break-all;
+    max-height: 320px; overflow-y: auto;
+    margin: 0 24px 24px;
+  }
+  .json-key { color: var(--info); }
+  .json-string { color: var(--accent-2); }
+  .json-number { color: var(--accent); }
+  .json-bool { color: var(--danger); }
+
+  /* ── CTA button ── */
+  .cta-link {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    background: var(--accent); color: #1c1917;
+    text-decoration: none; font-weight: 700; font-size: 14px;
+    padding: 12px 20px; border-radius: var(--radius);
+    transition: opacity .15s; margin: 0 24px 24px;
+  }
+  .cta-link:hover { opacity: .9; }
+
+  .section-label {
+    font-family: var(--font-mono); font-size: 11px;
+    text-transform: uppercase; letter-spacing: .6px;
+    color: var(--text-muted); padding: 16px 24px 8px;
+    border-top: 1px solid var(--border);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<a href="/alertas" class="back-link">← Volver a Alertas</a>
+
+<div class="detail-grid">
+
+  <!-- ── Main card ── -->
+  <div class="detail-card">
+    <div class="detail-header">
+      <div>
+        <div class="detail-title">{{ alerta.datos.titulo or '(sin título)' }}</div>
+        <div class="detail-codigo">{{ alerta.codigo }}</div>
+      </div>
+      <span class="tipo-badge-lg tipo-{{ alerta.tipo or 'licitacion' }}">
+        {% if alerta.tipo == 'licitacion' %}📄 Licitación
+        {% elif alerta.tipo == 'orden_compra' %}🛒 Orden de Compra
+        {% elif alerta.tipo == 'compra_agil' %}⚡ Compra Ágil
+        {% else %}{{ alerta.tipo or '?' }}{% endif %}
+      </span>
+    </div>
+
+    <div class="detail-body">
+      <!-- Monto -->
+      {% if alerta.datos.monto_clp %}
+      <div class="field-row">
+        <span class="field-label">Monto estimado</span>
+        <span class="field-value monto">
+          ${{ "{:,.0f}".format(alerta.datos.monto_clp) }} CLP
+        </span>
+      </div>
+      {% endif %}
+
+      <!-- Estado -->
+      {% if alerta.datos.estado %}
+      <div class="field-row">
+        <span class="field-label">Estado</span>
+        <span class="field-value">
+          <span class="tag">{{ alerta.datos.estado }}</span>
+        </span>
+      </div>
+      {% endif %}
+
+      <!-- Organismo -->
+      {% if alerta.datos.organismo %}
+      <div class="field-row">
+        <span class="field-label">Organismo</span>
+        <span class="field-value">{{ alerta.datos.organismo }}</span>
+      </div>
+      {% endif %}
+
+      <!-- Región -->
+      {% if alerta.datos.nombre_region %}
+      <div class="field-row">
+        <span class="field-label">Región</span>
+        <span class="field-value">
+          <span class="tag">R{{ alerta.datos.region }}</span>
+          {{ alerta.datos.nombre_region }}
+        </span>
+      </div>
+      {% endif %}
+
+      <!-- Fecha publicación -->
+      {% if alerta.datos.fecha_publicacion %}
+      <div class="field-row">
+        <span class="field-label">Publicación</span>
+        <span class="field-value mono">{{ alerta.datos.fecha_publicacion }}</span>
+      </div>
+      {% endif %}
+
+      <!-- Fecha cierre -->
+      {% if alerta.datos.fecha_cierre %}
+      <div class="field-row">
+        <span class="field-label">Cierre</span>
+        <span class="field-value mono">{{ alerta.datos.fecha_cierre }}</span>
+      </div>
+      {% endif %}
+
+      <!-- Códigos de producto -->
+      {% if alerta.datos.codigo_producto %}
+      <div class="field-row">
+        <span class="field-label">Categorías</span>
+        <span class="field-value" style="display:flex;gap:4px;flex-wrap:wrap">
+          {% for cod in alerta.datos.codigo_producto %}
+          <span class="tag">{{ cod }}</span>
+          {% endfor %}
+        </span>
+      </div>
+      {% endif %}
+
+      <!-- Link detalle -->
+      {% if alerta.datos.link_detalle %}
+      <div class="field-row">
+        <span class="field-label">Fuente</span>
+        <span class="field-value link">
+          <a href="{{ alerta.datos.link_detalle }}" target="_blank" rel="noopener">
+            mercadopublico.cl ↗
+          </a>
+        </span>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- CTA button -->
+    {% if alerta.datos.link_detalle %}
+    <a href="{{ alerta.datos.link_detalle }}" target="_blank" rel="noopener" class="cta-link">
+      🔗 Ver en Mercado Público
+    </a>
+    {% endif %}
+
+    <!-- Raw JSON collapse -->
+    <div class="section-label">Datos completos (JSON)</div>
+    <details style="padding: 0 24px 20px;">
+      <summary style="cursor:pointer;font-size:12px;color:var(--text-muted);font-family:var(--font-mono);padding:6px 0;">
+        ▶ Expandir JSON
+      </summary>
+      <pre class="json-viewer">{{ alerta.datos | tojson(indent=2) }}</pre>
+    </details>
+  </div>
+
+  <!-- ── Sidebar ── -->
+  <div style="display:flex;flex-direction:column;gap:16px">
+
+    <!-- Metadata de la alerta -->
+    <div class="sidebar-card">
+      <div class="sidebar-section-title">📌 Metadata de la alerta</div>
+      <div class="sidebar-row">
+        <span class="sidebar-label">ID Alerta</span>
+        <span class="sidebar-value mono">#{{ alerta.id }}</span>
+      </div>
+      <div class="sidebar-row">
+        <span class="sidebar-label">Regla</span>
+        <span class="sidebar-value">
+          <a href="/reglas/{{ alerta.regla_id }}/editar" class="link" style="font-size:13px">
+            {{ alerta.regla_nombre }}
+          </a>
+        </span>
+      </div>
+      <div class="sidebar-row">
+        <span class="sidebar-label">Detectada el</span>
+        <span class="sidebar-value mono">
+          {% if alerta.fecha_alerta %}
+          {{ alerta.fecha_alerta.strftime('%d-%m-%Y %H:%M:%S') }}
+          {% else %}—{% endif %}
+        </span>
+      </div>
+      <div class="sidebar-row">
+        <span class="sidebar-label">Email</span>
+        <div>
+          {% if alerta.enviado_email %}
+          <span class="status-badge status-ok">✓ Enviado</span>
+          {% else %}
+          <span class="status-badge status-pending">⏳ Pendiente</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Acciones rápidas -->
+    <div class="sidebar-card">
+      <div class="sidebar-section-title">⚡ Acciones rápidas</div>
+      <div style="padding:16px;display:flex;flex-direction:column;gap:8px;">
+        {% if alerta.datos.link_detalle %}
+        <a href="{{ alerta.datos.link_detalle }}" target="_blank" class="btn btn-primary" style="text-align:center">
+          🔗 Ver en Mercado Público
+        </a>
+        {% endif %}
+        <a href="/reglas/{{ alerta.regla_id }}/editar" class="btn btn-ghost" style="text-align:center">
+          ✏️ Editar regla
+        </a>
+        <form method="POST" action="/reglas/{{ alerta.regla_id }}/run">
+          <button type="submit" class="btn btn-ghost" style="width:100%">
+            ▶ Ejecutar regla ahora
+          </button>
+        </form>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}

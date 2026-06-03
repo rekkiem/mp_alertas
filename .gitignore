@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Entornos virtuales
+.venv/
+venv/
+env/
+ENV/
+
+# Variables de entorno — NUNCA subir al repo
+.env
+deploy/aws/params.production.json
+deploy/aws/params.staging.json
+
+# Base de datos local
+*.db
+*.db-shm
+*.db-wal
+
+# Logs
+logs/
+*.log
+
+# Certificados TLS
+certs/
+
+# AWS
+.aws/
+*.pem
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Docker
+.dockerignore
+
+# Test output
+test_output.txt
+htmlcov/
+.coverage
+.pytest_cache/

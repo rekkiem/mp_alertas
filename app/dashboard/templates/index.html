@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}Reglas{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Reglas de Alerta</h1>
+    <p class="page-subtitle">Configura filtros para recibir notificaciones automáticas de Mercado Público.</p>
+  </div>
+  <div class="page-actions">
+    <a href="/reglas/nueva" class="btn btn-primary">
+      <span>＋</span> Nueva Regla
+    </a>
+    <a href="/api/status" class="btn btn-ghost btn-sm" target="_blank">Estado API</a>
+  </div>
+</div>
+
+{% if reglas %}
+<div class="card">
+  <div class="card-header">
+    <span class="card-title">{{ reglas|length }} regla{{ 's' if reglas|length != 1 }} configurada{{ 's' if reglas|length != 1 }}</span>
+    <span style="font-size:11px;color:var(--text-dim);font-family:var(--font-mono);">
+      Activas: {{ reglas|selectattr('activa')|list|length }}
+    </span>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Nombre</th>
+          <th>Tipo</th>
+          <th>Filtros</th>
+          <th>Email Destino</th>
+          <th>Última ejecución</th>
+          <th>Alertas</th>
+          <th>Estado</th>
+          <th style="text-align:right">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in reglas %}
+        <tr>
+          <td class="mono text-muted">{{ r.id }}</td>
+          <td>
+            <span style="font-weight:700;color:var(--text);">{{ r.nombre_regla }}</span>
+          </td>
+          <td>
+            {% set badge = r.tipo_entidad | tipo_badge %}
+            <span class="badge {{ badge[1] }}">{{ badge[0] }} {{ badge[2] }}</span>
+          </td>
+          <td style="max-width:240px;">
+            <span style="font-size:12px;color:var(--text-muted);" title="{{ r.filtros | tojson }}">
+              {{ r.filtros_desc[:80] }}{% if r.filtros_desc|length > 80 %}…{% endif %}
+            </span>
+          </td>
+          <td class="mono" style="font-size:12px;color:var(--text-muted);">
+            {{ r.email_destino[:40] }}{% if r.email_destino|length > 40 %}…{% endif %}
+          </td>
+          <td class="mono" style="font-size:11px;color:var(--text-dim);">
+            {% if r.fecha_ultima_ejecucion %}
+              {{ r.fecha_ultima_ejecucion.strftime('%d/%m %H:%M') }}
+            {% else %}
+              <span class="text-muted">Nunca</span>
+            {% endif %}
+          </td>
+          <td>
+            <a href="/alertas?regla_id={{ r.id }}" class="link mono" style="font-size:13px;">
+              {{ r.alertas_count }}
+            </a>
+          </td>
+          <td>
+            {% if r.activa %}
+              <span class="badge badge-active">● Activa</span>
+            {% else %}
+              <span class="badge badge-inactive">○ Pausada</span>
+            {% endif %}
+          </td>
+          <td>
+            <div style="display:flex;gap:4px;justify-content:flex-end;flex-wrap:wrap;">
+              <!-- Ejecutar -->
+              <form method="POST" action="/reglas/{{ r.id }}/run" style="display:inline;">
+                <button type="submit" class="btn btn-success btn-sm" title="Ejecutar ahora">▶</button>
+              </form>
+              <!-- Editar -->
+              <a href="/reglas/{{ r.id }}/editar" class="btn btn-ghost btn-sm" title="Editar">✎</a>
+              <!-- Toggle -->
+              <form method="POST" action="/reglas/{{ r.id }}/toggle" style="display:inline;">
+                <button type="submit" class="btn btn-ghost btn-sm" title="{{ 'Desactivar' if r.activa else 'Activar' }}">
+                  {{ '⏸' if r.activa else '▶' }}
+                </button>
+              </form>
+              <!-- Eliminar -->
+              <form method="POST" action="/reglas/{{ r.id }}/delete" style="display:inline;"
+                    onsubmit="return confirm('¿Eliminar regla «{{ r.nombre_regla }}»? Esto también eliminará sus alertas.');">
+                <button type="submit" class="btn btn-danger btn-sm" title="Eliminar">✕</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% else %}
+<div class="card">
+  <div class="empty-state">
+    <div class="empty-state-icon">⚡</div>
+    <h3>No hay reglas configuradas</h3>
+    <p>Crea tu primera regla para recibir alertas automáticas de licitaciones, órdenes de compra y compra ágil.</p>
+    <br>
+    <a href="/reglas/nueva" class="btn btn-primary">Crear primera regla</a>
+  </div>
+</div>
+{% endif %}
+
+<!-- Tip contextual -->
+<div style="margin-top:20px;padding:14px 18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);display:flex;gap:12px;align-items:flex-start;">
+  <span style="font-size:18px;flex-shrink:0;">💡</span>
+  <div>
+    <p style="font-size:13px;color:var(--text);font-weight:700;margin-bottom:2px;">Tip: Ejecuta tu regla ahora</p>
+    <p style="font-size:12px;color:var(--text-muted);">
+      El scheduler corre automáticamente a las
+      <span class="tag">{{ "06:00" }}</span> hora Chile.
+      Usa el botón <strong>▶</strong> para ejecutar manualmente cualquier regla sin esperar.
+    </p>
+  </div>
+</div>
+{% endblock %}

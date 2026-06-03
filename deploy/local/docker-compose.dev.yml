@@ -1,0 +1,14 @@
+# docker-compose.dev.yml — Override para desarrollo local con hot-reload
+# Uso: docker compose -f docker-compose.yml -f deploy/local/docker-compose.dev.yml up
+version: "3.9"
+services:
+  app:
+    build:
+      target: builder
+    volumes:
+      - .:/app          # Monta código fuente para hot-reload
+      - /app/.venv      # Excluye .venv del mount
+    environment:
+      FLASK_DEBUG: "1"
+      DATABASE_URL: sqlite:////data/dev.db
+    command: ["python", "main.py", "--demo"]

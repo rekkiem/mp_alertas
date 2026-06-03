@@ -1,0 +1,357 @@
+{% extends "base.html" %}
+{% block title %}Alertas{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* ── Page header ── */
+  .page-header {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    margin-bottom: 24px; gap: 16px; flex-wrap: wrap;
+  }
+  .page-title { font-size: 22px; font-weight: 800; color: var(--text); }
+  .page-subtitle { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+
+  /* ── Filters bar ── */
+  .filters-bar {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 16px 20px;
+    display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end;
+    margin-bottom: 20px;
+  }
+  .filter-group { display: flex; flex-direction: column; gap: 5px; min-width: 160px; flex: 1; }
+  .filter-label { font-size: 11px; font-family: var(--font-mono); color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; }
+  .filter-select, .filter-input {
+    background: var(--surface-2); border: 1px solid var(--border-2);
+    color: var(--text); border-radius: var(--radius);
+    padding: 7px 10px; font-size: 13px; font-family: var(--font-ui);
+    outline: none; transition: border-color .15s;
+  }
+  .filter-select:focus, .filter-input:focus { border-color: var(--accent); }
+  .filter-select option { background: var(--surface-2); }
+  .filter-actions { display: flex; gap: 8px; align-items: flex-end; }
+
+  /* ── Stats strip ── */
+  .stats-strip {
+    display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;
+  }
+  .stat-chip {
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 20px; padding: 4px 12px;
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; font-family: var(--font-mono);
+  }
+  .stat-chip-num { color: var(--accent); font-weight: 700; }
+  .stat-chip-label { color: var(--text-muted); }
+
+  /* ── Table ── */
+  .table-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); overflow: hidden;
+  }
+  .table-scroll { overflow-x: auto; }
+  table {
+    width: 100%; border-collapse: collapse;
+    font-size: 13px;
+  }
+  thead {
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    padding: 10px 16px; text-align: left;
+    font-family: var(--font-mono); font-size: 11px;
+    text-transform: uppercase; letter-spacing: .6px;
+    color: var(--text-muted); white-space: nowrap;
+    font-weight: 500;
+  }
+  td {
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    vertical-align: top; line-height: 1.4;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.02); }
+
+  /* ── Tipo badge ── */
+  .tipo-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border-radius: 4px;
+    font-family: var(--font-mono); font-size: 10px;
+    font-weight: 600; text-transform: uppercase; letter-spacing: .5px;
+    white-space: nowrap;
+  }
+  .tipo-licitacion { background: var(--info-dim); color: var(--info); border: 1px solid rgba(88,166,255,.2); }
+  .tipo-orden_compra { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(230,168,23,.2); }
+  .tipo-compra_agil { background: var(--accent-2-dim); color: var(--accent-2); border: 1px solid rgba(63,185,80,.2); }
+
+  /* ── Status indicators ── */
+  .indicator {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-family: var(--font-mono);
+  }
+  .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .dot-green { background: var(--accent-2); box-shadow: 0 0 4px var(--accent-2); }
+  .dot-amber { background: var(--accent); }
+  .dot-red   { background: var(--danger); }
+
+  /* ── Monto ── */
+  .monto {
+    font-family: var(--font-mono); font-size: 12px;
+    color: var(--accent-2); white-space: nowrap;
+  }
+  .monto-null { color: var(--text-dim); font-size: 11px; }
+
+  /* ── Código ── */
+  .codigo {
+    font-family: var(--font-mono); font-size: 11px;
+    color: var(--text-muted); letter-spacing: .3px;
+  }
+
+  /* ── Acciones ── */
+  .action-link {
+    display: inline-flex; align-items: center; gap: 4px;
+    color: var(--accent); text-decoration: none;
+    font-size: 12px; font-family: var(--font-mono);
+    padding: 4px 8px; border-radius: var(--radius);
+    border: 1px solid transparent;
+    transition: all .15s;
+  }
+  .action-link:hover {
+    background: var(--accent-dim); border-color: var(--accent);
+  }
+
+  /* ── Row title ── */
+  .row-title {
+    color: var(--text); font-size: 13px; font-weight: 500;
+    max-width: 320px; display: -webkit-box;
+    -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+  .row-organismo { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+  /* ── Pagination ── */
+  .pager {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px; border-top: 1px solid var(--border);
+    flex-wrap: wrap; gap: 10px;
+  }
+  .pager-info { font-size: 12px; color: var(--text-muted); font-family: var(--font-mono); }
+  .pager-links { display: flex; gap: 4px; }
+  .pager-btn {
+    padding: 5px 10px; border-radius: var(--radius);
+    background: var(--surface-2); border: 1px solid var(--border);
+    color: var(--text-muted); text-decoration: none; font-size: 12px;
+    font-family: var(--font-mono); transition: all .15s;
+  }
+  .pager-btn:hover, .pager-btn.current {
+    background: var(--accent-dim); color: var(--accent);
+    border-color: var(--accent);
+  }
+  .pager-btn.disabled {
+    opacity: .3; pointer-events: none;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Header ── -->
+<div class="page-header">
+  <div>
+    <h1 class="page-title">🔔 Alertas Generadas</h1>
+    <p class="page-subtitle">Coincidencias detectadas por tus reglas de filtrado</p>
+  </div>
+</div>
+
+<!-- ── Filters ── -->
+<form method="GET" action="/alertas">
+  <div class="filters-bar">
+    <div class="filter-group">
+      <label class="filter-label">Tipo de entidad</label>
+      <select name="tipo" class="filter-select">
+        <option value="">Todos los tipos</option>
+        <option value="licitacion" {% if tipo_filtro == 'licitacion' %}selected{% endif %}>Licitación</option>
+        <option value="orden_compra" {% if tipo_filtro == 'orden_compra' %}selected{% endif %}>Orden de compra</option>
+        <option value="compra_agil" {% if tipo_filtro == 'compra_agil' %}selected{% endif %}>Compra ágil</option>
+      </select>
+    </div>
+
+    <div class="filter-group">
+      <label class="filter-label">Regla</label>
+      <select name="regla" class="filter-select">
+        <option value="">Todas las reglas</option>
+        {% for r in reglas_select %}
+        <option value="{{ r.id }}" {% if regla_filtro == r.id|string %}selected{% endif %}>{{ r.nombre }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="filter-actions">
+      <button type="submit" class="btn btn-primary">Filtrar</button>
+      <a href="/alertas" class="btn btn-ghost">Limpiar</a>
+    </div>
+  </div>
+</form>
+
+<!-- ── Stats strip ── -->
+<div class="stats-strip">
+  <div class="stat-chip">
+    <span class="stat-chip-num">{{ total }}</span>
+    <span class="stat-chip-label">alertas totales</span>
+  </div>
+  <div class="stat-chip">
+    <span class="stat-chip-num">{{ total_paginas }}</span>
+    <span class="stat-chip-label">páginas</span>
+  </div>
+  <div class="stat-chip">
+    <span class="stat-chip-num">{{ per_page }}</span>
+    <span class="stat-chip-label">por página</span>
+  </div>
+</div>
+
+<!-- ── Table ── -->
+<div class="table-card">
+  {% if alertas %}
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Tipo</th>
+          <th>Código</th>
+          <th>Título / Organismo</th>
+          <th>Monto CLP</th>
+          <th>Región</th>
+          <th>Regla</th>
+          <th>Fecha alerta</th>
+          <th>Email</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in alertas %}
+        <tr>
+          <!-- Tipo -->
+          <td>
+            <span class="tipo-badge tipo-{{ a.tipo or 'licitacion' }}">
+              {% if a.tipo == 'licitacion' %}📄 Lic
+              {% elif a.tipo == 'orden_compra' %}🛒 OC
+              {% elif a.tipo == 'compra_agil' %}⚡ CA
+              {% else %}?{% endif %}
+            </span>
+          </td>
+
+          <!-- Código -->
+          <td><span class="codigo">{{ a.codigo or '—' }}</span></td>
+
+          <!-- Título -->
+          <td>
+            <div class="row-title" title="{{ a.titulo }}">{{ a.titulo or '(sin título)' }}</div>
+            <div class="row-organismo">{{ a.organismo or '' }}</div>
+          </td>
+
+          <!-- Monto -->
+          <td>
+            {% if a.monto_clp %}
+            <span class="monto">${{ "{:,.0f}".format(a.monto_clp) }}</span>
+            {% else %}
+            <span class="monto-null">—</span>
+            {% endif %}
+          </td>
+
+          <!-- Región -->
+          <td>
+            {% if a.nombre_region %}
+            <span class="tag">R{{ a.region or '?' }}</span>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px">{{ a.nombre_region|truncate(22, True, '') }}</div>
+            {% else %}
+            <span class="monto-null">—</span>
+            {% endif %}
+          </td>
+
+          <!-- Regla -->
+          <td>
+            <a href="/reglas/{{ a.regla_id }}/editar" class="link" style="font-size:12px">
+              {{ a.regla_nombre|truncate(30, True, '…') }}
+            </a>
+          </td>
+
+          <!-- Fecha alerta -->
+          <td>
+            <span style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted)">
+              {{ a.fecha_alerta.strftime('%d-%m-%Y') if a.fecha_alerta else '—' }}
+            </span>
+            <div style="font-size:10px;color:var(--text-dim)">
+              {{ a.fecha_alerta.strftime('%H:%M') if a.fecha_alerta else '' }}
+            </div>
+          </td>
+
+          <!-- Email enviado -->
+          <td>
+            {% if a.enviado_email %}
+            <span class="indicator">
+              <span class="dot dot-green"></span>
+              <span style="color:var(--accent-2)">Enviado</span>
+            </span>
+            {% else %}
+            <span class="indicator">
+              <span class="dot dot-amber"></span>
+              <span style="color:var(--text-muted)">Pendiente</span>
+            </span>
+            {% endif %}
+          </td>
+
+          <!-- Ver detalle -->
+          <td>
+            <a href="/alertas/{{ a.id }}" class="action-link">
+              Ver →
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── Pagination ── -->
+  {% if total_paginas > 1 %}
+  <div class="pager">
+    <span class="pager-info">
+      Mostrando {{ (page-1)*per_page + 1 }}–{{ [page*per_page, total]|min }} de {{ total }}
+    </span>
+    <div class="pager-links">
+      <a href="?page=1&tipo={{ tipo_filtro or '' }}&regla={{ regla_filtro or '' }}"
+         class="pager-btn {% if page == 1 %}disabled{% endif %}">« Primera</a>
+      <a href="?page={{ page-1 }}&tipo={{ tipo_filtro or '' }}&regla={{ regla_filtro or '' }}"
+         class="pager-btn {% if page == 1 %}disabled{% endif %}">‹ Prev</a>
+
+      {% for p in range([1, page-2]|max, [total_paginas+1, page+3]|min) %}
+      <a href="?page={{ p }}&tipo={{ tipo_filtro or '' }}&regla={{ regla_filtro or '' }}"
+         class="pager-btn {% if p == page %}current{% endif %}">{{ p }}</a>
+      {% endfor %}
+
+      <a href="?page={{ page+1 }}&tipo={{ tipo_filtro or '' }}&regla={{ regla_filtro or '' }}"
+         class="pager-btn {% if page == total_paginas %}disabled{% endif %}">Next ›</a>
+      <a href="?page={{ total_paginas }}&tipo={{ tipo_filtro or '' }}&regla={{ regla_filtro or '' }}"
+         class="pager-btn {% if page == total_paginas %}disabled{% endif %}">Última »</a>
+    </div>
+  </div>
+  {% endif %}
+
+  {% else %}
+  <!-- ── Empty state ── -->
+  <div class="empty-state">
+    <div class="empty-state-icon">🔕</div>
+    <h3>Sin alertas aún</h3>
+    <p>
+      {% if tipo_filtro or regla_filtro %}
+        No hay alertas con los filtros seleccionados.
+        <a href="/alertas" class="link">Ver todas</a>
+      {% else %}
+        Cuando el scheduler detecte coincidencias, aparecerán aquí.
+        <br>También puedes <a href="/" class="link">ejecutar una regla manualmente</a>.
+      {% endif %}
+    </p>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

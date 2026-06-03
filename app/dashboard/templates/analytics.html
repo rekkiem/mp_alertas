@@ -1,0 +1,515 @@
+{% extends "base.html" %}
+{% block title %}Analytics{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  .analytics-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 24px; flex-wrap: wrap; gap: 12px;
+  }
+  .page-title { font-size: 22px; font-weight: 800; color: var(--text); }
+  .page-subtitle { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+
+  /* ── Controls ── */
+  .controls-bar {
+    display: flex; gap: 8px; align-items: center;
+  }
+  .ctrl-select {
+    background: var(--surface-2); border: 1px solid var(--border-2);
+    color: var(--text); border-radius: var(--radius);
+    padding: 6px 10px; font-size: 13px; font-family: var(--font-ui);
+    outline: none; cursor: pointer;
+  }
+  .ctrl-select:focus { border-color: var(--accent); }
+
+  /* ── KPI cards ── */
+  .kpi-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 12px; margin-bottom: 24px;
+  }
+  @media (max-width: 900px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+
+  .kpi-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 16px 20px;
+    position: relative; overflow: hidden; transition: border-color .2s;
+  }
+  .kpi-card:hover { border-color: var(--border-2); }
+  .kpi-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  }
+  .kpi-card.amber::before { background: var(--accent); }
+  .kpi-card.green::before { background: var(--accent-2); }
+  .kpi-card.blue::before  { background: var(--info); }
+  .kpi-card.red::before   { background: var(--danger); }
+
+  .kpi-label {
+    font-family: var(--font-mono); font-size: 10px; text-transform: uppercase;
+    letter-spacing: .6px; color: var(--text-muted); margin-bottom: 6px;
+  }
+  .kpi-value {
+    font-family: var(--font-mono); font-size: 26px; font-weight: 700;
+    color: var(--text); line-height: 1;
+  }
+  .kpi-value.amber { color: var(--accent); }
+  .kpi-value.green { color: var(--accent-2); }
+  .kpi-value.blue  { color: var(--info); }
+  .kpi-sub {
+    font-size: 11px; color: var(--text-muted); margin-top: 4px;
+    font-family: var(--font-mono);
+  }
+  .kpi-delta {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-family: var(--font-mono); font-size: 11px; margin-top: 4px;
+  }
+  .kpi-delta.up   { color: var(--accent-2); }
+  .kpi-delta.down { color: var(--danger); }
+
+  /* ── Chart cards ── */
+  .charts-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 16px; margin-bottom: 20px;
+  }
+  .charts-wide { grid-column: span 2; }
+  @media (max-width: 900px) {
+    .charts-grid { grid-template-columns: 1fr; }
+    .charts-wide { grid-column: span 1; }
+  }
+
+  .chart-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); overflow: hidden;
+  }
+  .chart-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px; border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+  }
+  .chart-title {
+    font-size: 13px; font-weight: 600; color: var(--text);
+  }
+  .chart-subtitle { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+  .chart-body { padding: 16px; position: relative; }
+  .chart-body canvas { max-height: 280px; }
+
+  /* ── Loading skeleton ── */
+  .skeleton {
+    background: linear-gradient(90deg,
+      var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 4px;
+  }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+  .skeleton-kpi { height: 60px; }
+  .skeleton-chart { height: 200px; }
+
+  /* ── Table dentro de charts ── */
+  .mini-table { width: 100%; font-size: 12px; border-collapse: collapse; }
+  .mini-table tr { border-bottom: 1px solid var(--border); }
+  .mini-table tr:last-child { border-bottom: none; }
+  .mini-table td { padding: 8px 4px; }
+  .mini-table .t-label { color: var(--text); font-size: 12px; }
+  .mini-table .t-mono { font-family: var(--font-mono); color: var(--text-muted); font-size: 11px; }
+  .mini-table .t-num { font-family: var(--font-mono); color: var(--accent-2); text-align: right; }
+  .mini-table .t-bar { width: 80px; }
+  .bar-mini {
+    height: 4px; border-radius: 2px; background: var(--accent);
+    transition: width .4s ease;
+  }
+
+  /* ── Período selector ── */
+  .period-btn {
+    padding: 4px 10px; border-radius: var(--radius);
+    background: var(--surface-2); border: 1px solid var(--border);
+    color: var(--text-muted); cursor: pointer; font-size: 12px;
+    font-family: var(--font-mono); transition: all .15s;
+  }
+  .period-btn.active, .period-btn:hover {
+    background: var(--accent-dim); color: var(--accent); border-color: var(--accent);
+  }
+
+  .nodata {
+    text-align: center; padding: 40px; color: var(--text-dim);
+    font-family: var(--font-mono); font-size: 12px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Header ── -->
+<div class="analytics-header">
+  <div>
+    <h1 class="page-title">📊 Analytics</h1>
+    <p class="page-subtitle">Inteligencia sobre datos sincronizados de Mercado Público</p>
+  </div>
+  <div class="controls-bar">
+    <span style="font-size:12px;color:var(--text-muted);font-family:var(--font-mono)">Período:</span>
+    <button class="period-btn active" data-dias="30">30d</button>
+    <button class="period-btn" data-dias="90">90d</button>
+    <button class="period-btn" data-dias="180">180d</button>
+    <button class="period-btn" data-dias="365">365d</button>
+    <select class="ctrl-select" id="tipoFilter">
+      <option value="">Todos los tipos</option>
+      <option value="licitacion">Licitaciones</option>
+      <option value="orden_compra">Órdenes de compra</option>
+      <option value="compra_agil">Compra ágil</option>
+    </select>
+  </div>
+</div>
+
+<!-- ── KPIs ── -->
+<div class="kpi-grid" id="kpiGrid">
+  <div class="kpi-card amber"><div class="skeleton skeleton-kpi"></div></div>
+  <div class="kpi-card green"><div class="skeleton skeleton-kpi"></div></div>
+  <div class="kpi-card blue"><div class="skeleton skeleton-kpi"></div></div>
+  <div class="kpi-card red"><div class="skeleton skeleton-kpi"></div></div>
+</div>
+
+<!-- ── Charts row 1 ── -->
+<div class="charts-grid">
+  <div class="chart-card charts-wide">
+    <div class="chart-header">
+      <div>
+        <div class="chart-title">📈 Tendencia temporal</div>
+        <div class="chart-subtitle">Publicaciones por mes</div>
+      </div>
+    </div>
+    <div class="chart-body"><canvas id="chartTemporal"></canvas></div>
+  </div>
+</div>
+
+<!-- ── Charts row 2 ── -->
+<div class="charts-grid">
+  <div class="chart-card">
+    <div class="chart-header">
+      <div>
+        <div class="chart-title">🏷️ Top Categorías</div>
+        <div class="chart-subtitle">Por cantidad de publicaciones</div>
+      </div>
+    </div>
+    <div class="chart-body" id="categoriasBody">
+      <div class="skeleton skeleton-chart"></div>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-header">
+      <div>
+        <div class="chart-title">🏛️ Top Organismos</div>
+        <div class="chart-subtitle">Compradores más activos</div>
+      </div>
+    </div>
+    <div class="chart-body" id="organismosBody">
+      <div class="skeleton skeleton-chart"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Charts row 3 ── -->
+<div class="charts-grid">
+  <div class="chart-card">
+    <div class="chart-header">
+      <div>
+        <div class="chart-title">🗺️ Distribución Regional</div>
+        <div class="chart-subtitle">Actividad por región de Chile</div>
+      </div>
+    </div>
+    <div class="chart-body"><canvas id="chartRegional" style="max-height:260px"></canvas></div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-header">
+      <div>
+        <div class="chart-title">📅 Actividad Diaria</div>
+        <div class="chart-subtitle">Últimas 30 jornadas</div>
+      </div>
+    </div>
+    <div class="chart-body"><canvas id="chartDiario" style="max-height:260px"></canvas></div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ── Theme tokens ──────────────────────────────────────────────────────────────
+const C = {
+  amber:    '#e6a817',
+  green:    '#3fb950',
+  blue:     '#58a6ff',
+  red:      '#f85149',
+  muted:    '#8b949e',
+  border:   '#21262d',
+  text:     '#c9d1d9',
+  bg:       '#07090f',
+  surface2: '#161b22',
+};
+
+Chart.defaults.color = C.muted;
+Chart.defaults.borderColor = C.border;
+Chart.defaults.font.family = "'IBM Plex Mono', monospace";
+Chart.defaults.font.size = 11;
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let dias = 30;
+let tipo = '';
+let charts = {};
+
+// ── Fetch helpers ─────────────────────────────────────────────────────────────
+async function fetchJson(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+function qp(extra = {}) {
+  const p = new URLSearchParams({ dias, ...(tipo ? { tipo } : {}), ...extra });
+  return p.toString();
+}
+
+// ── KPIs ──────────────────────────────────────────────────────────────────────
+async function loadKPIs() {
+  const el = document.getElementById('kpiGrid');
+  try {
+    const d = await fetchJson(`/api/analytics/resumen?${qp()}`);
+    const fmt = n => n?.toLocaleString('es-CL') ?? '—';
+    const fmtM = n => n ? `$${(n/1_000_000).toFixed(1)}M` : '—';
+
+    const delta = (v, s) => v > 0
+      ? `<span class="kpi-delta up">↑ ${v}% vs anterior</span>`
+      : v < 0 ? `<span class="kpi-delta down">↓ ${Math.abs(v)}% vs anterior</span>`
+      : `<span class="kpi-delta" style="color:var(--text-muted)">${s}</span>`;
+
+    el.innerHTML = `
+      <div class="kpi-card amber">
+        <div class="kpi-label">Total publicaciones</div>
+        <div class="kpi-value amber">${fmt(d.total_entidades)}</div>
+        ${delta(d.variacion_entidades ?? 0, 'sin cambio')}
+      </div>
+      <div class="kpi-card green">
+        <div class="kpi-label">Monto total CLP</div>
+        <div class="kpi-value green">${fmtM(d.monto_total_clp)}</div>
+        <div class="kpi-sub">promedio ${fmtM(d.monto_promedio_clp)}</div>
+      </div>
+      <div class="kpi-card blue">
+        <div class="kpi-label">Alertas generadas</div>
+        <div class="kpi-value blue">${fmt(d.total_alertas)}</div>
+        <div class="kpi-sub">${d.reglas_activas ?? 0} reglas activas</div>
+      </div>
+      <div class="kpi-card red">
+        <div class="kpi-label">Organismos únicos</div>
+        <div class="kpi-value">${fmt(d.organismos_unicos)}</div>
+        <div class="kpi-sub">${d.regiones_activas ?? 0} regiones</div>
+      </div>
+    `;
+  } catch(e) {
+    el.innerHTML = `<div style="color:var(--danger);font-size:12px;font-family:var(--font-mono);grid-column:span 4;padding:12px">Error cargando KPIs: ${e.message}</div>`;
+  }
+}
+
+// ── Temporal chart ────────────────────────────────────────────────────────────
+async function loadTemporal() {
+  try {
+    const data = await fetchJson(`/api/analytics/temporal?${qp()}`);
+    if (charts.temporal) charts.temporal.destroy();
+
+    const labels = data.map(d => d.periodo ?? d.mes ?? d.label ?? '?');
+    const counts = data.map(d => d.cantidad ?? d.count ?? 0);
+    const montos = data.map(d => (d.monto_total ?? 0) / 1_000_000);
+
+    const ctx = document.getElementById('chartTemporal').getContext('2d');
+    charts.temporal = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Publicaciones',
+            data: counts,
+            backgroundColor: `rgba(230,168,23,.25)`,
+            borderColor: C.amber,
+            borderWidth: 1.5,
+            borderRadius: 3,
+            yAxisID: 'y',
+          },
+          {
+            label: 'Monto (M CLP)',
+            data: montos,
+            type: 'line',
+            borderColor: C.green,
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            pointRadius: 3,
+            pointBackgroundColor: C.green,
+            tension: .3,
+            yAxisID: 'y2',
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { labels: { usePointStyle: true, boxWidth: 8 } } },
+        scales: {
+          x: { grid: { color: C.border } },
+          y: { grid: { color: C.border }, title: { display: true, text: 'Cantidad', color: C.muted } },
+          y2: {
+            position: 'right', grid: { display: false },
+            title: { display: true, text: 'Monto M CLP', color: C.muted }
+          }
+        }
+      }
+    });
+  } catch(e) {
+    document.getElementById('chartTemporal').replaceWith(
+      Object.assign(document.createElement('div'), { className: 'nodata', textContent: 'Sin datos para el período seleccionado' })
+    );
+  }
+}
+
+// ── Categorías ────────────────────────────────────────────────────────────────
+async function loadCategorias() {
+  const el = document.getElementById('categoriasBody');
+  try {
+    const data = await fetchJson(`/api/analytics/categorias?${qp({ limit: 12 })}`);
+    if (!data.length) { el.innerHTML = '<div class="nodata">Sin datos</div>'; return; }
+
+    const maxN = Math.max(...data.map(d => d.cantidad ?? 0)) || 1;
+    el.innerHTML = `<table class="mini-table">
+      <tbody>
+        ${data.map(d => `<tr>
+          <td class="t-label">${d.nombre ?? d.categoria ?? d.codigo ?? '?'}</td>
+          <td class="t-bar"><div class="bar-mini" style="width:${((d.cantidad??0)/maxN*100).toFixed(0)}%"></div></td>
+          <td class="t-num">${(d.cantidad ?? 0).toLocaleString('es-CL')}</td>
+          <td class="t-mono">$${((d.monto_total??0)/1e6).toFixed(1)}M</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+  } catch(e) {
+    el.innerHTML = `<div class="nodata">Error: ${e.message}</div>`;
+  }
+}
+
+// ── Organismos ────────────────────────────────────────────────────────────────
+async function loadOrganismos() {
+  const el = document.getElementById('organismosBody');
+  try {
+    const data = await fetchJson(`/api/analytics/organismos?${qp({ limit: 12 })}`);
+    if (!data.length) { el.innerHTML = '<div class="nodata">Sin datos</div>'; return; }
+
+    const maxN = Math.max(...data.map(d => d.cantidad ?? 0)) || 1;
+    el.innerHTML = `<table class="mini-table">
+      <tbody>
+        ${data.map(d => `<tr>
+          <td class="t-label">${d.organismo ?? d.nombre ?? '?'}</td>
+          <td class="t-bar"><div class="bar-mini" style="width:${((d.cantidad??0)/maxN*100).toFixed(0)}%;background:var(--green)"></div></td>
+          <td class="t-num">${(d.cantidad ?? 0).toLocaleString('es-CL')}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+  } catch(e) {
+    el.innerHTML = `<div class="nodata">Error: ${e.message}</div>`;
+  }
+}
+
+// ── Regional ──────────────────────────────────────────────────────────────────
+async function loadRegional() {
+  try {
+    const data = await fetchJson(`/api/analytics/regional?${qp()}`);
+    if (charts.regional) charts.regional.destroy();
+    if (!data.length) return;
+
+    const ctx = document.getElementById('chartRegional').getContext('2d');
+    charts.regional = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: data.map(d => d.nombre_region ?? `R${d.region}` ?? '?'),
+        datasets: [{
+          data: data.map(d => d.cantidad ?? 0),
+          backgroundColor: [
+            C.amber, C.green, C.blue, C.red,
+            '#a78bfa', '#fb923c', '#34d399', '#f472b6',
+            '#60a5fa', '#fbbf24', '#4ade80', '#f87171',
+            '#c084fc', '#fb7185',
+          ].slice(0, data.length),
+          borderWidth: 0,
+          hoverOffset: 6,
+        }]
+      },
+      options: {
+        plugins: {
+          legend: { position: 'right', labels: { boxWidth: 10, padding: 10, font: { size: 10 } } }
+        },
+        cutout: '58%',
+      }
+    });
+  } catch(e) {
+    console.error('Regional:', e);
+  }
+}
+
+// ── Diario ────────────────────────────────────────────────────────────────────
+async function loadDiario() {
+  try {
+    const data = await fetchJson(`/api/analytics/diario?dias=30`);
+    if (charts.diario) charts.diario.destroy();
+    if (!data.length) return;
+
+    const ctx = document.getElementById('chartDiario').getContext('2d');
+    charts.diario = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: data.map(d => d.fecha ?? d.dia ?? '?'),
+        datasets: [{
+          label: 'Publicaciones',
+          data: data.map(d => d.cantidad ?? 0),
+          borderColor: C.blue,
+          backgroundColor: 'rgba(88,166,255,.08)',
+          fill: true,
+          borderWidth: 2,
+          pointRadius: 2,
+          tension: .3,
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: C.border }, ticks: { maxTicksLimit: 10 } },
+          y: { grid: { color: C.border }, beginAtZero: true }
+        }
+      }
+    });
+  } catch(e) {
+    console.error('Diario:', e);
+  }
+}
+
+// ── Load all ──────────────────────────────────────────────────────────────────
+async function loadAll() {
+  await Promise.all([loadKPIs(), loadTemporal(), loadCategorias(), loadOrganismos(), loadRegional(), loadDiario()]);
+}
+
+// ── Controls ──────────────────────────────────────────────────────────────────
+document.querySelectorAll('.period-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    dias = parseInt(btn.dataset.dias);
+    loadAll();
+  });
+});
+
+document.getElementById('tipoFilter').addEventListener('change', e => {
+  tipo = e.target.value;
+  loadAll();
+});
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadAll();
+</script>
+{% endblock %}

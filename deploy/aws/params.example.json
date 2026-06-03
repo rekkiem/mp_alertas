@@ -1,0 +1,18 @@
+[
+  {"ParameterKey": "AppName",              "ParameterValue": "mp-alertas"},
+  {"ParameterKey": "Environment",          "ParameterValue": "production"},
+  {"ParameterKey": "DockerImage",          "ParameterValue": "123456789012.dkr.ecr.us-east-1.amazonaws.com/mp-alertas:latest"},
+  {"ParameterKey": "VpcId",               "ParameterValue": "vpc-xxxxxxxxxxxxxxxxx"},
+  {"ParameterKey": "SubnetIds",            "ParameterValue": "subnet-aaaaaaaaaaaaaaaa,subnet-bbbbbbbbbbbbbbbb"},
+  {"ParameterKey": "PrivateSubnetIds",     "ParameterValue": "subnet-cccccccccccccccc,subnet-dddddddddddddddd"},
+  {"ParameterKey": "CertificateArn",       "ParameterValue": ""},
+  {"ParameterKey": "DbPassword",           "ParameterValue": "CAMBIAR_minimo16chars_AHORA"},
+  {"ParameterKey": "DashboardPass",        "ParameterValue": "CAMBIAR_dashboard_pass"},
+  {"ParameterKey": "TicketMercadoPublico", "ParameterValue": "TU_TICKET_API_MERCADO_PUBLICO"},
+  {"ParameterKey": "SmtpPassword",         "ParameterValue": "TU_SMTP_APP_PASSWORD"},
+  {"ParameterKey": "SmtpHost",             "ParameterValue": "smtp.gmail.com"},
+  {"ParameterKey": "SmtpUser",             "ParameterValue": "tu@gmail.com"},
+  {"ParameterKey": "AdminEmail",           "ParameterValue": "admin@tudominio.cl"},
+  {"ParameterKey": "ContainerCpu",         "ParameterValue": "256"},
+  {"ParameterKey": "ContainerMemory",      "ParameterValue": "512"}
+]

@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar' if regla else 'Nueva' }} Regla{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ '✎ Editar Regla' if regla else '＋ Nueva Regla' }}</h1>
+    <p class="page-subtitle">
+      {% if regla %}Modifica los criterios de la regla «{{ regla.nombre_regla }}».
+      {% else %}Define los filtros y tu email para recibir alertas automáticas.{% endif %}
+    </p>
+  </div>
+  <a href="/" class="btn btn-ghost">← Volver</a>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start;">
+
+  <!-- Formulario principal -->
+  <form method="POST" action="{{ '/reglas/' + regla.id|string + '/editar' if regla else '/reglas/nueva' }}">
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header"><span class="card-title">Identificación</span></div>
+      <div class="card-body">
+        <div class="form-group">
+          <label class="form-label">Nombre de la regla *</label>
+          <input type="text" name="nombre_regla" class="form-control"
+                 placeholder="Ej: Licitaciones TI en RM sobre $5M"
+                 value="{{ regla.nombre_regla if regla else form_data.get('nombre_regla','') }}"
+                 required>
+          <p class="form-hint">Un nombre descriptivo para identificar esta regla en el dashboard.</p>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div class="form-group">
+            <label class="form-label">Tipo de entidad *</label>
+            <select name="tipo_entidad" class="form-control">
+              {% set tipo_actual = regla.tipo_entidad if regla else form_data.get('tipo_entidad','licitacion') %}
+              <option value="licitacion"   {% if tipo_actual=='licitacion' %}selected{% endif %}>🏛 Licitación</option>
+              <option value="orden_compra" {% if tipo_actual=='orden_compra' %}selected{% endif %}>📋 Orden de Compra</option>
+              <option value="compra_agil"  {% if tipo_actual=='compra_agil' %}selected{% endif %}>⚡ Compra Ágil</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Email(s) destino *</label>
+            <input type="text" name="email_destino" class="form-control"
+                   placeholder="correo@empresa.cl, otro@empresa.cl"
+                   value="{{ regla.email_destino if regla else form_data.get('email_destino','') }}"
+                   required>
+            <p class="form-hint">Separa múltiples emails con comas.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header">
+        <span class="card-title">Filtros de búsqueda</span>
+        <span style="font-size:11px;color:var(--text-dim);">AND lógico — todos deben cumplirse</span>
+      </div>
+      <div class="card-body">
+
+        <!-- Región -->
+        <div class="form-group">
+          <label class="form-label">Región</label>
+          <select name="region" class="form-control">
+            <option value="">— Cualquier región —</option>
+            {% for codigo, nombre in regiones.items() %}
+            <option value="{{ codigo }}"
+              {% if form_data.get('region')|string == codigo|string or
+                    (regla and regla.get('filtros',{}).get('region')|string == codigo|string) %}selected{% endif %}>
+              {{ codigo }} — {{ nombre }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Montos -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div class="form-group">
+            <label class="form-label">Monto mínimo (CLP)</label>
+            <input type="number" name="monto_min" class="form-control" placeholder="Ej: 1000000"
+                   value="{{ regla.filtros.monto_min if regla and regla.get('filtros',{}).get('monto_min') else form_data.get('monto_min','') }}">
+            <p class="form-hint">Deja en blanco para sin mínimo.</p>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Monto máximo (CLP)</label>
+            <input type="number" name="monto_max" class="form-control" placeholder="Ej: 50000000"
+                   value="{{ regla.filtros.monto_max if regla and regla.get('filtros',{}).get('monto_max') else form_data.get('monto_max','') }}">
+            <p class="form-hint">Deja en blanco para sin máximo.</p>
+          </div>
+        </div>
+
+        <!-- Palabras clave -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div class="form-group">
+            <label class="form-label">Título contiene</label>
+            <input type="text" name="titulo_contains" class="form-control"
+                   placeholder="Ej: software, consultoría, arriendo"
+                   value="{{ regla.filtros.titulo_contains if regla and regla.get('filtros',{}).get('titulo_contains') else form_data.get('titulo_contains','') }}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Título NO contiene (excluir)</label>
+            <input type="text" name="titulo_not_contains" class="form-control"
+                   placeholder="Ej: mantenimiento, aseo"
+                   value="{{ regla.filtros.titulo_not_contains if regla and regla.get('filtros',{}).get('titulo_not_contains') else form_data.get('titulo_not_contains','') }}">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Organismo contiene</label>
+          <input type="text" name="organismo_contains" class="form-control"
+                 placeholder="Ej: municipalidad, ministerio, servicio"
+                 value="{{ regla.filtros.organismo_contains if regla and regla.get('filtros',{}).get('organismo_contains') else form_data.get('organismo_contains','') }}">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Códigos de producto (UN/SPSC)</label>
+          <textarea name="codigo_producto_in" class="form-control" rows="2"
+                    placeholder="43200000&#10;43220000&#10;72000000">{{ regla.filtros.get('codigo_producto_in',[])|join('\n') if regla and regla.get('filtros') else form_data.get('codigo_producto_in','') }}</textarea>
+          <p class="form-hint">Un código por línea o separados por coma. Ej: 43200000 (TI), 72000000 (Servicios TI).</p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Estado</label>
+          <select name="estado" class="form-control">
+            <option value="">— Cualquier estado —</option>
+            <option value="publicada">Publicada</option>
+            <option value="cerrada">Cerrada</option>
+            <option value="adjudicada">Adjudicada</option>
+            <option value="desierta">Desierta</option>
+            <option value="suspendida">Suspendida</option>
+          </select>
+        </div>
+
+        <hr class="divider">
+
+        <!-- JSON avanzado -->
+        <details>
+          <summary style="cursor:pointer;font-size:12px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">
+            ⚙ Filtros avanzados (JSON directo)
+          </summary>
+          <div class="form-group" style="margin-top:12px;">
+            <label class="form-label">JSON de filtros (override)</label>
+            <textarea name="filtros_json" class="form-control" rows="4"
+                      style="font-family:var(--font-mono);font-size:12px;"
+                      placeholder='{"region_in":[13,5],"monto_min":1000000}'></textarea>
+            <p class="form-hint">
+              Sobrescribe los filtros anteriores si se ingresa JSON válido.
+              Operadores: region, region_in, monto_min, monto_max, titulo_contains,
+              titulo_not_contains, descripcion_contains, codigo_producto_in,
+              organismo_contains, estado, estado_in.
+            </p>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;">
+      <button type="submit" class="btn btn-primary">
+        {{ '💾 Guardar cambios' if regla else '⚡ Crear regla' }}
+      </button>
+      <a href="/" class="btn btn-ghost">Cancelar</a>
+    </div>
+  </form>
+
+  <!-- Panel lateral de ayuda -->
+  <div>
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header"><span class="card-title">Vista previa del filtro</span></div>
+      <div class="card-body">
+        <p style="font-size:12px;color:var(--text-muted);">
+          El sistema evaluará estos criterios sobre cada entidad descargada de la API.
+          Todos los filtros deben cumplirse (AND).
+        </p>
+        <div id="preview" style="margin-top:12px;padding:10px;background:var(--surface-2);border-radius:var(--radius);font-family:var(--font-mono);font-size:11px;color:var(--accent);min-height:40px;">
+          — Configura filtros para ver la vista previa —
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header"><span class="card-title">Regiones de Chile</span></div>
+      <div class="card-body" style="padding:12px;">
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:11px;">
+          {% for c, n in regiones.items() %}
+          <span class="tag">{{ c }}</span>
+          <span style="color:var(--text-muted);padding:2px 0;">{{ n }}</span>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="card-title">Códigos frecuentes</span></div>
+      <div class="card-body" style="padding:12px;">
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:11px;">
+          <span class="tag">43200000</span><span style="color:var(--text-muted);">Tecnología</span>
+          <span class="tag">43220000</span><span style="color:var(--text-muted);">Software</span>
+          <span class="tag">72000000</span><span style="color:var(--text-muted);">Servicios TI</span>
+          <span class="tag">85000000</span><span style="color:var(--text-muted);">Salud</span>
+          <span class="tag">80100000</span><span style="color:var(--text-muted);">Educación</span>
+          <span class="tag">45000000</span><span style="color:var(--text-muted);">Construcción</span>
+          <span class="tag">30200000</span><span style="color:var(--text-muted);">Equipos oficina</span>
+          <span class="tag">92000000</span><span style="color:var(--text-muted);">Servicios com.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

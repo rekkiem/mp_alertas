@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}MP Alertas{% endblock %} · Mercado Público</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    /* ── Variables ── */
+    :root {
+      --bg:          #07090f;
+      --surface:     #0d1117;
+      --surface-2:   #161b22;
+      --surface-3:   #1c2128;
+      --border:      #21262d;
+      --border-2:    #30363d;
+      --accent:      #e6a817;
+      --accent-dim:  rgba(230,168,23,.12);
+      --accent-2:    #3fb950;
+      --accent-2-dim:rgba(63,185,80,.10);
+      --danger:      #f85149;
+      --danger-dim:  rgba(248,81,73,.12);
+      --info:        #58a6ff;
+      --info-dim:    rgba(88,166,255,.10);
+      --text:        #c9d1d9;
+      --text-muted:  #8b949e;
+      --text-dim:    #484f58;
+      --radius:      8px;
+      --radius-lg:   12px;
+      --font-mono:   'IBM Plex Mono', monospace;
+      --font-ui:     'Syne', sans-serif;
+      --nav-h:       60px;
+      --sidebar-w:   220px;
+    }
+
+    /* ── Reset ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-ui);
+      font-size: 14px;
+      line-height: 1.6;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Topbar ── */
+    .topbar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      height: var(--nav-h);
+      background: rgba(13,17,23,.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; padding: 0 24px;
+      gap: 32px;
+    }
+    .topbar-brand {
+      display: flex; align-items: center; gap: 10px; text-decoration: none;
+      flex-shrink: 0;
+    }
+    .topbar-logo {
+      width: 30px; height: 30px;
+      background: var(--accent);
+      border-radius: 6px;
+      display: grid; place-items: center;
+      font-family: var(--font-mono);
+      font-size: 12px; font-weight: 700; color: #1c1917;
+    }
+    .topbar-name {
+      font-size: 15px; font-weight: 800; color: var(--text);
+      letter-spacing: -0.3px;
+    }
+    .topbar-name span { color: var(--accent); }
+
+    .topbar-nav { display: flex; align-items: center; gap: 4px; flex: 1; }
+    .nav-link {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 12px; border-radius: var(--radius);
+      text-decoration: none; color: var(--text-muted);
+      font-size: 13px; font-weight: 600;
+      transition: color .15s, background .15s;
+      white-space: nowrap;
+    }
+    .nav-link:hover { color: var(--text); background: var(--surface-2); }
+    .nav-link.active { color: var(--accent); background: var(--accent-dim); }
+    .nav-icon { font-size: 15px; }
+
+    .topbar-right {
+      margin-left: auto; display: flex; align-items: center; gap: 12px;
+    }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--accent-2);
+      box-shadow: 0 0 6px var(--accent-2);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.4 } }
+    .topbar-time {
+      font-family: var(--font-mono); font-size: 12px; color: var(--text-dim);
+    }
+
+    /* ── Layout ── */
+    .page-wrapper { padding-top: var(--nav-h); min-height: 100vh; }
+    .container { max-width: 1280px; margin: 0 auto; padding: 32px 24px; }
+
+    /* ── Page header ── */
+    .page-header {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      margin-bottom: 28px; gap: 16px; flex-wrap: wrap;
+    }
+    .page-title {
+      font-size: 24px; font-weight: 800; color: var(--text);
+      letter-spacing: -0.5px; line-height: 1.2;
+    }
+    .page-subtitle { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+    .page-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+    .card-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px;
+    }
+    .card-title {
+      font-size: 13px; font-weight: 700; color: var(--text);
+      text-transform: uppercase; letter-spacing: 1px;
+    }
+    .card-body { padding: 20px; }
+
+    /* ── KPI Cards ── */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px; margin-bottom: 24px;
+    }
+    .kpi-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 18px 20px;
+      position: relative; overflow: hidden;
+    }
+    .kpi-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0;
+      height: 2px; background: var(--accent);
+    }
+    .kpi-card.green::before  { background: var(--accent-2); }
+    .kpi-card.blue::before   { background: var(--info); }
+    .kpi-card.red::before    { background: var(--danger); }
+    .kpi-label {
+      font-size: 10px; font-weight: 700; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 8px;
+    }
+    .kpi-value {
+      font-size: 26px; font-weight: 800;
+      font-family: var(--font-mono);
+      color: var(--text); line-height: 1;
+    }
+    .kpi-sub { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+    .kpi-var { font-family: var(--font-mono); font-size: 11px; margin-top: 4px; }
+    .kpi-var.up { color: var(--accent-2); }
+    .kpi-var.down { color: var(--danger); }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 16px; border-radius: var(--radius);
+      font-family: var(--font-ui); font-size: 13px; font-weight: 700;
+      text-decoration: none; cursor: pointer; border: 1px solid transparent;
+      transition: all .15s; white-space: nowrap;
+    }
+    .btn-primary {
+      background: var(--accent); color: #1c1917; border-color: var(--accent);
+    }
+    .btn-primary:hover { background: #f5ba2a; }
+    .btn-ghost {
+      background: transparent; color: var(--text-muted); border-color: var(--border-2);
+    }
+    .btn-ghost:hover { color: var(--text); background: var(--surface-2); }
+    .btn-danger {
+      background: var(--danger-dim); color: var(--danger); border-color: var(--danger);
+    }
+    .btn-danger:hover { background: var(--danger); color: #fff; }
+    .btn-success {
+      background: var(--accent-2-dim); color: var(--accent-2); border-color: var(--accent-2);
+    }
+    .btn-success:hover { background: var(--accent-2); color: var(--bg); }
+    .btn-sm { padding: 5px 10px; font-size: 12px; }
+    .btn:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* ── Badges ── */
+    .badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px; border-radius: 20px;
+      font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+    }
+    .badge-licitacion { background: var(--info-dim); color: var(--info); }
+    .badge-oc         { background: var(--accent-dim); color: var(--accent); }
+    .badge-agil       { background: var(--accent-2-dim); color: var(--accent-2); }
+    .badge-default    { background: var(--surface-2); color: var(--text-muted); }
+    .badge-active     { background: var(--accent-2-dim); color: var(--accent-2); }
+    .badge-inactive   { background: var(--surface-2); color: var(--text-dim); }
+
+    /* ── Tables ── */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      padding: 10px 14px;
+      background: var(--surface-2); color: var(--text-muted);
+      font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px;
+      font-weight: 700; text-align: left; border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    td {
+      padding: 11px 14px; border-bottom: 1px solid var(--border);
+      color: var(--text); vertical-align: middle;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--surface-2); }
+    .mono { font-family: var(--font-mono); font-size: 12px; }
+    .text-muted { color: var(--text-muted) !important; }
+    .text-accent { color: var(--accent); }
+    .text-green { color: var(--accent-2); }
+    .text-danger { color: var(--danger); }
+
+    /* ── Forms ── */
+    .form-group { margin-bottom: 18px; }
+    .form-label {
+      display: block; font-size: 12px; font-weight: 700;
+      color: var(--text-muted); text-transform: uppercase;
+      letter-spacing: 1px; margin-bottom: 6px;
+    }
+    .form-control {
+      width: 100%; padding: 9px 12px;
+      background: var(--surface-2); border: 1px solid var(--border-2);
+      border-radius: var(--radius); color: var(--text);
+      font-family: var(--font-ui); font-size: 13px;
+      transition: border-color .15s;
+    }
+    .form-control:focus {
+      outline: none; border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-dim);
+    }
+    .form-control::placeholder { color: var(--text-dim); }
+    select.form-control option { background: var(--surface-2); }
+    .form-hint { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+
+    /* ── Flash messages ── */
+    .flash-list { margin-bottom: 20px; }
+    .flash {
+      padding: 12px 16px; border-radius: var(--radius);
+      font-size: 13px; border: 1px solid;
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 8px;
+    }
+    .flash-success { background: var(--accent-2-dim); color: var(--accent-2); border-color: var(--accent-2); }
+    .flash-error   { background: var(--danger-dim);   color: var(--danger);   border-color: var(--danger); }
+    .flash-info    { background: var(--info-dim);      color: var(--info);     border-color: var(--info); }
+    .flash-warning { background: var(--accent-dim);    color: var(--accent);   border-color: var(--accent); }
+
+    /* ── Empty state ── */
+    .empty-state {
+      text-align: center; padding: 60px 24px; color: var(--text-muted);
+    }
+    .empty-state-icon { font-size: 40px; margin-bottom: 12px; }
+    .empty-state h3 { font-size: 16px; color: var(--text); margin-bottom: 6px; }
+    .empty-state p { font-size: 13px; }
+
+    /* ── Pagination ── */
+    .pagination {
+      display: flex; align-items: center; gap: 6px;
+      justify-content: center; padding: 20px 0;
+    }
+    .page-btn {
+      padding: 6px 12px; border-radius: var(--radius);
+      background: var(--surface-2); border: 1px solid var(--border);
+      color: var(--text-muted); text-decoration: none; font-size: 13px;
+      transition: all .15s;
+    }
+    .page-btn:hover, .page-btn.active {
+      background: var(--accent-dim); color: var(--accent); border-color: var(--accent);
+    }
+
+    /* ── Misc ── */
+    .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+    .tag {
+      display: inline-block; padding: 2px 6px; border-radius: 4px;
+      background: var(--surface-3); font-family: var(--font-mono);
+      font-size: 11px; color: var(--text-muted);
+    }
+    .link { color: var(--accent); text-decoration: none; }
+    .link:hover { text-decoration: underline; }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      .topbar { padding: 0 12px; gap: 12px; }
+      .container { padding: 20px 12px; }
+      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+<!-- ── Topbar ── -->
+<nav class="topbar">
+  <a href="/" class="topbar-brand">
+    <div class="topbar-logo">MP</div>
+    <span class="topbar-name">MP <span>Alertas</span></span>
+  </a>
+
+  <div class="topbar-nav">
+    <a href="/" class="nav-link {% if request.endpoint == 'dashboard.index' %}active{% endif %}">
+      <span class="nav-icon">⚡</span> Reglas
+    </a>
+    <a href="/alertas" class="nav-link {% if request.endpoint == 'dashboard.alertas' or request.endpoint == 'dashboard.alerta_detalle' %}active{% endif %}">
+      <span class="nav-icon">🔔</span> Alertas
+    </a>
+    <a href="/analytics" class="nav-link {% if request.endpoint == 'dashboard.analytics_dashboard' %}active{% endif %}">
+      <span class="nav-icon">📊</span> Analytics
+    </a>
+  </div>
+
+  <div class="topbar-right">
+    <div class="status-dot" title="Sistema operativo"></div>
+    <span class="topbar-time" id="clock">—</span>
+  </div>
+</nav>
+
+<!-- ── Content ── -->
+<div class="page-wrapper">
+  <div class="container">
+
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% if msgs %}
+    <div class="flash-list">
+      {% for cat, msg in msgs %}
+      <div class="flash flash-{{ cat }}">
+        {% if cat == 'success' %}✓{% elif cat == 'error' %}✗{% elif cat == 'warning' %}⚠{% else %}ℹ{% endif %}
+        {{ msg }}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </div>
+</div>
+
+<script>
+  // Reloj en tiempo real
+  function tick() {
+    const d = new Date();
+    document.getElementById('clock').textContent =
+      d.toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  }
+  tick(); setInterval(tick, 1000);
+</script>
+{% block extra_js %}{% endblock %}
+</body>
+</html>
