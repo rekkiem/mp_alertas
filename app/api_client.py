@@ -131,7 +131,7 @@ class MercadoPublicoClient:
         if params is None:
             params = {}
         params.setdefault("ticket", self.ticket)
-d
+
         url = f"{self.BASE_URL}/{path.lstrip('/')}"
 
         for attempt in range(max_retries):
