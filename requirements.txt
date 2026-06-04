@@ -1,6 +1,6 @@
 Flask==3.0.3
 Flask-SQLAlchemy==3.1.1
-SQLAlchemy==2.0.35
+SQLAlchemy==2.0.50
 APScheduler==3.10.4
 requests==2.31.0
 pydantic==2.9.2
