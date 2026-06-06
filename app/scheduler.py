@@ -50,11 +50,18 @@ def _sincronizar_tipo(
 
     logger.info("[SYNC] Tipo=%s desde %s", tipo, fecha_api)
 
+    # Límites de seguridad por tipo en ejecución diaria del scheduler
+    # compra_agil filtra en memoria (sin soporte fecha en API) → limitar agresivamente
+    MAX_POR_TIPO = {"licitacion": 50_000, "orden_compra": 20_000, "compra_agil": 3_000}
+    max_registros = MAX_POR_TIPO.get(tipo, 20_000)
+
     if tipo == "licitacion":
         iterator = client.iter_licitaciones(fecha_desde=fecha_api)
     elif tipo == "orden_compra":
         iterator = client.iter_ordenes_compra(fecha_desde=fecha_api)
     elif tipo == "compra_agil":
+        # NOTA: la API rechaza fecha+tipo=CO juntos (HTTP 400).
+        # iter_oportunidades ya maneja esto: consulta por estado y filtra por fecha en memoria.
         iterator = client.iter_oportunidades(fecha_desde=fecha_api)
     else:
         logger.error("Tipo desconocido en sincronización: %s", tipo)
@@ -65,12 +72,17 @@ def _sincronizar_tipo(
         count_new = 0
         count_upd = 0
 
+        total_procesados = 0
         for raw in iterator:
             normalizado = normalizar_entidad(raw, tipo)
             if not normalizado:
                 continue
 
             entidades_norm.append(normalizado)
+            total_procesados += 1
+            if total_procesados >= max_registros:
+                logger.warning("[SYNC] Tipo=%s: límite de %d registros alcanzado — deteniendo.", tipo, max_registros)
+                break
             codigo = normalizado.get("codigo", "")
             if not codigo:
                 continue
