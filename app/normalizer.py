@@ -129,11 +129,19 @@ def _extract_productos(items_raw: Any) -> List[str]:
 # ── Normalizadores por tipo ───────────────────────────────────────────────────
 
 def normalizar_licitacion(raw: Dict) -> Dict:
-    """Normaliza una licitación devuelta por la API v1."""
+    """
+    Normaliza una licitación devuelta por la API v1.
+
+    La API de listado (endpoint con ?fecha=...) devuelve SOLO:
+      CodigoExterno, Nombre, CodigoEstado, FechaCierre
+    La API de detalle (endpoint con ?codigo=...) devuelve el objeto completo
+      con Comprador, MontoEstimado, FechaPublicacion, Items, etc.
+    Este normalizador maneja ambos casos.
+    """
     comprador = raw.get("Comprador") or {}
     region, nombre_region = _extract_region(comprador)
 
-    # Monto
+    # Monto — solo disponible en respuesta de detalle
     monto_raw = raw.get("MontoEstimado")
     moneda_raw = raw.get("Moneda") or "CLP"
     try:
@@ -144,22 +152,31 @@ def normalizar_licitacion(raw: Dict) -> Dict:
 
     codigo = raw.get("CodigoExterno") or raw.get("Codigo") or ""
 
+    # Fecha publicación — solo en detalle; en listado no viene
+    fecha_pub = _parse_date(
+        raw.get("FechaPublicacion") or raw.get("FechaCreacion")
+    )
+    # Fecha cierre — disponible en listado y detalle
+    fecha_cierre = _parse_date(raw.get("FechaCierre"))
+
     return {
         "tipo": "licitacion",
         "codigo": codigo,
         "titulo": raw.get("Nombre") or "",
         "descripcion": raw.get("Descripcion") or "",
-        "estado": raw.get("Estado") or "",
+        "estado": _resolve_estado(raw),
         "region": region,
         "nombre_region": nombre_region,
         "organismo": comprador.get("NombreOrganismo"),
         "codigo_organismo": comprador.get("CodigoOrganismo"),
-        "fecha_publicacion": _parse_date(raw.get("FechaPublicacion")),
-        "fecha_cierre": _parse_date(raw.get("FechaCierre")),
+        "fecha_publicacion": fecha_pub,
+        "fecha_cierre": fecha_cierre,
         "monto_clp": monto_clp,
         "moneda": "CLP",
         "codigo_producto": _extract_productos(raw.get("Items")),
         "link_detalle": _LIC_DETAIL_URL.format(codigo=codigo),
+        # Indicador para saber si los datos son del listado (mínimos) o del detalle (completos)
+        "_enriquecido": bool(comprador or monto_clp or fecha_pub),
         "_raw": raw,
     }
 
@@ -184,7 +201,7 @@ def normalizar_orden_compra(raw: Dict) -> Dict:
         "codigo": codigo,
         "titulo": raw.get("Nombre") or raw.get("Descripcion") or "",
         "descripcion": raw.get("Descripcion") or "",
-        "estado": raw.get("Estado") or raw.get("EstadoOC") or "",
+        "estado": _resolve_estado(raw),
         "region": region,
         "nombre_region": nombre_region,
         "organismo": comprador.get("NombreOrganismo"),
@@ -208,6 +225,32 @@ def normalizar_oportunidad(raw: Dict) -> Dict:
     normalizado["tipo"] = "compra_agil"
     normalizado["link_detalle"] = _OPP_DETAIL_URL.format(codigo=normalizado["codigo"])
     return normalizado
+
+
+# ── Mapa CodigoEstado → texto legible ───────────────────────────────────────
+# La API de listado devuelve solo CodigoEstado (int/str) sin el campo Estado
+_ESTADO_MAP = {
+    "1": "Borrador",
+    "2": "Publicada",
+    "3": "Cerrada",
+    "4": "Desierta",
+    "5": "Adjudicada",
+    "6": "Revocada",
+    "7": "Suspendida",
+    "8": "Publicada",
+    "9": "Publicada",
+}
+
+def _resolve_estado(raw: Dict) -> str:
+    """
+    Resuelve el estado desde Estado (texto) o CodigoEstado (int/str).
+    La API de listado solo devuelve CodigoEstado; la de detalle devuelve Estado.
+    """
+    estado = raw.get("Estado") or ""
+    if estado:
+        return estado
+    codigo = str(raw.get("CodigoEstado") or "").strip()
+    return _ESTADO_MAP.get(codigo, f"Estado {codigo}" if codigo else "")
 
 
 # ── Dispatcher ────────────────────────────────────────────────────────────────

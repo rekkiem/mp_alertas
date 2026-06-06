@@ -509,3 +509,294 @@ def api_status():
             "proxima_ejecucion": next_run,
         },
     })
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# NAVEGADOR DE LICITACIONES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@bp.route("/licitaciones")
+@requires_auth
+def licitaciones_browser():
+    from sqlalchemy import cast, String, func, desc, asc
+    from datetime import datetime as _dt
+
+    # ── Parámetros de filtro ────────────────────────────────────────────────
+    page         = request.args.get("page",    1,    type=int)
+    per_page     = request.args.get("pp",      50,   type=int)
+    per_page     = min(per_page, 200)
+
+    q            = request.args.get("q",       "").strip()
+    f_tipo       = request.args.get("tipo",    "").strip()
+    f_estado     = request.args.get("estado",  "").strip()
+    f_region     = request.args.get("region",  "").strip()
+    f_monto_min  = request.args.get("mmin",    "").strip()
+    f_monto_max  = request.args.get("mmax",    "").strip()
+    f_fecha_d    = request.args.get("fd",      "").strip()   # fecha cierre desde YYYY-MM-DD
+    f_fecha_h    = request.args.get("fh",      "").strip()   # fecha cierre hasta YYYY-MM-DD
+    f_sinc_d     = request.args.get("sd",      "").strip()   # sincronizado desde
+    f_enr        = request.args.get("enr",     "").strip()   # si|no|""
+    orden        = request.args.get("orden",   "sinc_desc")  # sinc_desc|monto_desc|fecha_desc|titulo_asc
+    f_org        = request.args.get("org",     "").strip()   # organismo contains
+
+    with get_db() as db:
+        base_q = db.query(LicitacionSnapshot)
+
+        # ── Filtros ──────────────────────────────────────────────────────────
+        if f_tipo:
+            base_q = base_q.filter(LicitacionSnapshot.tipo == f_tipo)
+
+        if f_estado:
+            base_q = base_q.filter(LicitacionSnapshot.estado == f_estado)
+
+        if f_region:
+            try:
+                base_q = base_q.filter(LicitacionSnapshot.region == int(f_region))
+            except ValueError:
+                pass
+
+        if f_monto_min:
+            try:
+                base_q = base_q.filter(LicitacionSnapshot.monto_clp >= int(f_monto_min))
+            except ValueError:
+                pass
+
+        if f_monto_max:
+            try:
+                base_q = base_q.filter(LicitacionSnapshot.monto_clp <= int(f_monto_max))
+            except ValueError:
+                pass
+
+        if f_fecha_d:
+            try:
+                base_q = base_q.filter(
+                    LicitacionSnapshot.fecha_publicacion >= _dt.strptime(f_fecha_d, "%Y-%m-%d")
+                )
+            except ValueError:
+                pass
+
+        if f_fecha_h:
+            try:
+                base_q = base_q.filter(
+                    LicitacionSnapshot.fecha_publicacion <= _dt.strptime(f_fecha_h, "%Y-%m-%d")
+                )
+            except ValueError:
+                pass
+
+        if f_sinc_d:
+            try:
+                base_q = base_q.filter(
+                    LicitacionSnapshot.fecha_sincronizacion >= _dt.strptime(f_sinc_d, "%Y-%m-%d")
+                )
+            except ValueError:
+                pass
+
+        if f_enr == "si":
+            base_q = base_q.filter(LicitacionSnapshot.region.isnot(None))
+        elif f_enr == "no":
+            base_q = base_q.filter(LicitacionSnapshot.region.is_(None))
+
+        # Búsqueda texto: código, título serializado en JSON, organismo
+        if q:
+            like = f"%{q}%"
+            base_q = base_q.filter(
+                LicitacionSnapshot.codigo.ilike(like) |
+                cast(LicitacionSnapshot.datos["titulo"], String).ilike(like) |
+                cast(LicitacionSnapshot.datos["organismo"], String).ilike(like)
+            )
+
+        if f_org:
+            base_q = base_q.filter(
+                cast(LicitacionSnapshot.datos["organismo"], String).ilike(f"%{f_org}%")
+            )
+
+        # ── Ordenamiento ─────────────────────────────────────────────────────
+        orden_map = {
+            "sinc_desc":  LicitacionSnapshot.fecha_sincronizacion.desc(),
+            "sinc_asc":   LicitacionSnapshot.fecha_sincronizacion.asc(),
+            "monto_desc": LicitacionSnapshot.monto_clp.desc().nulls_last(),
+            "monto_asc":  LicitacionSnapshot.monto_clp.asc().nulls_last(),
+            "fecha_desc": LicitacionSnapshot.fecha_publicacion.desc().nulls_last(),
+            "fecha_asc":  LicitacionSnapshot.fecha_publicacion.asc().nulls_last(),
+            "titulo_asc": cast(LicitacionSnapshot.datos["titulo"], String).asc(),
+        }
+        base_q = base_q.order_by(orden_map.get(orden, LicitacionSnapshot.fecha_sincronizacion.desc()))
+
+        total      = base_q.count()
+        snaps      = base_q.offset((page - 1) * per_page).limit(per_page).all()
+
+        # ── Stats globales ───────────────────────────────────────────────────
+        total_all  = db.query(func.count(LicitacionSnapshot.id)).scalar()
+        con_datos  = db.query(func.count(LicitacionSnapshot.id)).filter(
+                         LicitacionSnapshot.region.isnot(None)).scalar()
+        sin_datos  = total_all - con_datos
+
+        monto_total = db.query(func.sum(LicitacionSnapshot.monto_clp)).filter(
+                          LicitacionSnapshot.monto_clp.isnot(None)).scalar() or 0
+
+        monto_prom  = db.query(func.avg(LicitacionSnapshot.monto_clp)).filter(
+                          LicitacionSnapshot.monto_clp.isnot(None)).scalar() or 0
+
+        # Top estados para el selector
+        estados_q  = (db.query(LicitacionSnapshot.estado, func.count(LicitacionSnapshot.id))
+                        .filter(LicitacionSnapshot.estado.isnot(None),
+                                LicitacionSnapshot.estado != "")
+                        .group_by(LicitacionSnapshot.estado)
+                        .order_by(func.count(LicitacionSnapshot.id).desc())
+                        .all())
+        estados_opts = [(e, n) for e, n in estados_q if e]
+
+        # Top regiones para el selector
+        regiones_q = (db.query(LicitacionSnapshot.region, func.count(LicitacionSnapshot.id))
+                        .filter(LicitacionSnapshot.region.isnot(None))
+                        .group_by(LicitacionSnapshot.region)
+                        .order_by(func.count(LicitacionSnapshot.id).desc())
+                        .all())
+        regiones_opts = [(r, REGIONES_CHILE.get(r, f"R{r}"), n) for r, n in regiones_q]
+
+        # Monto máximo para el slider de referencia
+        monto_max_bd = db.query(func.max(LicitacionSnapshot.monto_clp)).scalar() or 0
+
+        # ── Serializar filas ─────────────────────────────────────────────────
+        rows = []
+        for s in snaps:
+            d = s.datos or {}
+            rows.append({
+                "id":            s.id,
+                "codigo":        s.codigo,
+                "tipo":          s.tipo,
+                "titulo":        d.get("titulo") or s.codigo,
+                "organismo":     d.get("organismo") or "",
+                "region":        s.region,
+                "nombre_region": d.get("nombre_region") or REGIONES_CHILE.get(s.region, ""),
+                "monto_clp":     s.monto_clp,
+                "estado":        s.estado or d.get("estado") or "",
+                "fecha_pub":     s.fecha_publicacion.strftime("%d-%m-%Y") if s.fecha_publicacion else None,
+                "fecha_cierre":  d.get("fecha_cierre"),
+                "fecha_sinc":    s.fecha_sincronizacion.strftime("%d-%m-%Y %H:%M") if s.fecha_sincronizacion else "",
+                "link":          d.get("link_detalle") or "",
+                "enriquecido":   s.region is not None or s.monto_clp is not None,
+            })
+
+    return render_template(
+        "licitaciones.html",
+        rows=rows,
+        page=page, per_page=per_page,
+        total=total, total_paginas=max(1, (total + per_page - 1) // per_page),
+        # filtros activos
+        q=q, f_tipo=f_tipo, f_estado=f_estado, f_region=f_region,
+        f_monto_min=f_monto_min, f_monto_max=f_monto_max,
+        f_fecha_d=f_fecha_d, f_fecha_h=f_fecha_h, f_sinc_d=f_sinc_d,
+        f_enr=f_enr, orden=orden, f_org=f_org,
+        # opciones para selectores
+        estados_opts=estados_opts, regiones_opts=regiones_opts,
+        REGIONES_CHILE=REGIONES_CHILE,
+        # stats
+        total_all=total_all, con_datos=con_datos, sin_datos=sin_datos,
+        monto_total=monto_total, monto_prom=int(monto_prom),
+        monto_max_bd=monto_max_bd,
+    )
+
+
+@bp.route("/licitaciones/export.csv")
+@requires_auth
+def licitaciones_export_csv():
+    """Exporta los resultados filtrados actuales a CSV."""
+    import csv, io
+    from sqlalchemy import cast, String, func
+    from datetime import datetime as _dt
+
+    q        = request.args.get("q",      "").strip()
+    f_tipo   = request.args.get("tipo",   "").strip()
+    f_estado = request.args.get("estado", "").strip()
+    f_region = request.args.get("region", "").strip()
+    f_monto_min = request.args.get("mmin","").strip()
+    f_monto_max = request.args.get("mmax","").strip()
+    f_fecha_d   = request.args.get("fd",  "").strip()
+    f_fecha_h   = request.args.get("fh",  "").strip()
+    f_enr       = request.args.get("enr", "").strip()
+    orden       = request.args.get("orden","sinc_desc")
+
+    with get_db() as db:
+        base_q = db.query(LicitacionSnapshot)
+        if f_tipo:   base_q = base_q.filter(LicitacionSnapshot.tipo == f_tipo)
+        if f_estado: base_q = base_q.filter(LicitacionSnapshot.estado == f_estado)
+        if f_region:
+            try: base_q = base_q.filter(LicitacionSnapshot.region == int(f_region))
+            except ValueError: pass
+        if f_monto_min:
+            try: base_q = base_q.filter(LicitacionSnapshot.monto_clp >= int(f_monto_min))
+            except ValueError: pass
+        if f_monto_max:
+            try: base_q = base_q.filter(LicitacionSnapshot.monto_clp <= int(f_monto_max))
+            except ValueError: pass
+        if f_fecha_d:
+            try: base_q = base_q.filter(LicitacionSnapshot.fecha_publicacion >= _dt.strptime(f_fecha_d, "%Y-%m-%d"))
+            except ValueError: pass
+        if f_fecha_h:
+            try: base_q = base_q.filter(LicitacionSnapshot.fecha_publicacion <= _dt.strptime(f_fecha_h, "%Y-%m-%d"))
+            except ValueError: pass
+        if f_enr == "si": base_q = base_q.filter(LicitacionSnapshot.region.isnot(None))
+        elif f_enr == "no": base_q = base_q.filter(LicitacionSnapshot.region.is_(None))
+        if q:
+            like = f"%{q}%"
+            base_q = base_q.filter(
+                LicitacionSnapshot.codigo.ilike(like) |
+                cast(LicitacionSnapshot.datos["titulo"], String).ilike(like)
+            )
+        orden_map = {
+            "sinc_desc":  LicitacionSnapshot.fecha_sincronizacion.desc(),
+            "monto_desc": LicitacionSnapshot.monto_clp.desc().nulls_last(),
+            "fecha_desc": LicitacionSnapshot.fecha_publicacion.desc().nulls_last(),
+        }
+        snaps = base_q.order_by(orden_map.get(orden, LicitacionSnapshot.fecha_sincronizacion.desc())).limit(10000).all()
+
+    buf = io.StringIO()
+    buf.write("\ufeff")   # BOM para Excel
+    writer = csv.writer(buf)
+    writer.writerow(["Codigo","Tipo","Titulo","Organismo","Estado",
+                     "Region","Monto_CLP","Fecha_Publicacion","Fecha_Cierre",
+                     "Datos_Completos","Link"])
+    for s in snaps:
+        d = s.datos or {}
+        writer.writerow([
+            s.codigo, s.tipo,
+            d.get("titulo",""), d.get("organismo",""),
+            s.estado or "",
+            REGIONES_CHILE.get(s.region, "") if s.region else "",
+            s.monto_clp or "",
+            s.fecha_publicacion.strftime("%Y-%m-%d") if s.fecha_publicacion else "",
+            d.get("fecha_cierre",""),
+            "Si" if (s.region is not None) else "No",
+            d.get("link_detalle",""),
+        ])
+
+    from flask import Response
+    ts = _dt.now().strftime("%Y%m%d_%H%M")
+    return Response(
+        buf.getvalue(),
+        mimetype="text/csv; charset=utf-8-sig",
+        headers={"Content-Disposition": f"attachment; filename=licitaciones_{ts}.csv"},
+    )
+
+
+@bp.route("/licitaciones/<int:snap_id>")
+@requires_auth
+def licitacion_detalle(snap_id: int):
+    with get_db() as db:
+        snap = db.query(LicitacionSnapshot).filter_by(id=snap_id).first()
+        if not snap: abort(404)
+        d = snap.datos or {}
+        item = {
+            "id":          snap.id,
+            "codigo":      snap.codigo,
+            "tipo":        snap.tipo,
+            "datos":       d,
+            "region":      snap.region,
+            "nombre_region": d.get("nombre_region") or REGIONES_CHILE.get(snap.region,""),
+            "monto_clp":   snap.monto_clp,
+            "estado":      snap.estado,
+            "fecha_sinc":  snap.fecha_sincronizacion,
+            "enriquecido": snap.region is not None,
+        }
+    return render_template("licitacion_detalle.html", item=item, REGIONES_CHILE=REGIONES_CHILE)

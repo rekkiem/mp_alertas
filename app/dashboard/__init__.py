@@ -34,6 +34,14 @@ def _requires_auth(f):
     return decorated
 
 
+def _format_number(value):
+    """Filtro Jinja2: formatea número con separadores de miles."""
+    try:
+        return f"{int(value):,}".replace(",", ".")
+    except (TypeError, ValueError):
+        return value or "—"
+
+
 def create_app() -> Flask:
     """Crea y configura la aplicación Flask."""
     app = Flask(__name__, template_folder="templates", static_folder="static")
@@ -70,4 +78,5 @@ def create_app() -> Flask:
     # Proteger todo el blueprint con Basic Auth si está habilitado
     # (se aplica en cada ruta individualmente para granularidad)
 
+    app.jinja_env.filters['format_number'] = _format_number
     return app

@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block title %}{{ item.codigo }}{% endblock %}
+
+{% block extra_head %}
+<style>
+.back-link { display:inline-flex;align-items:center;gap:6px;color:var(--text-muted);text-decoration:none;font-size:13px;margin-bottom:20px;transition:color .15s; }
+.back-link:hover { color:var(--accent); }
+.detail-grid { display:grid;grid-template-columns:1fr 300px;gap:18px;align-items:start; }
+@media(max-width:860px){.detail-grid{grid-template-columns:1fr}}
+
+.detail-card { background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden; }
+.detail-hdr  { padding:18px 22px;border-bottom:1px solid var(--border);background:var(--surface-2);display:flex;align-items:flex-start;justify-content:space-between;gap:12px; }
+.detail-title{ font-size:16px;font-weight:700;color:var(--text);line-height:1.4; }
+.detail-code { font-family:var(--font-mono);font-size:11px;color:var(--text-muted);margin-top:4px; }
+
+.field-row   { display:flex;align-items:baseline;gap:14px;padding:11px 22px;border-bottom:1px solid var(--border); }
+.field-row:last-child{border-bottom:none}
+.f-label     { font-family:var(--font-mono);font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;min-width:130px;flex-shrink:0; }
+.f-value     { font-size:13px;color:var(--text);flex:1;word-break:break-word; }
+.f-mono      { font-family:var(--font-mono); }
+.f-monto     { font-family:var(--font-mono);color:var(--accent-2);font-size:16px;font-weight:700; }
+.f-link a    { color:var(--accent);text-decoration:none;word-break:break-all; }
+.f-link a:hover{text-decoration:underline}
+
+.sidebar-card{ background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:14px; }
+.side-hdr    { padding:10px 14px;background:var(--surface-2);border-bottom:1px solid var(--border);font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-muted); }
+.side-row    { display:flex;flex-direction:column;gap:2px;padding:10px 14px;border-bottom:1px solid var(--border); }
+.side-row:last-child{border-bottom:none}
+.s-label     { font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--text-dim); }
+.s-value     { font-size:12px;color:var(--text); }
+.s-mono      { font-family:var(--font-mono); }
+
+.enr-badge   { display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:4px;font-size:11px;font-family:var(--font-mono); }
+.enr-full    { background:var(--accent-2-dim);color:var(--accent-2);border:1px solid rgba(63,185,80,.2); }
+.enr-partial { background:var(--accent-dim);color:var(--accent);border:1px solid rgba(230,168,23,.2); }
+
+.cta-btn     { display:flex;align-items:center;justify-content:center;gap:7px;background:var(--accent);color:#1c1917;text-decoration:none;font-weight:700;font-size:13px;padding:11px 16px;border-radius:var(--radius);transition:opacity .15s;margin:14px; }
+.cta-btn:hover{opacity:.88}
+
+pre.json-view{ background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;font-family:var(--font-mono);font-size:10px;color:var(--text-muted);white-space:pre-wrap;word-break:break-all;max-height:280px;overflow-y:auto;margin:0 22px 20px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<a href="/licitaciones" class="back-link">← Volver a Licitaciones</a>
+
+<div class="detail-grid">
+  <!-- Main card -->
+  <div class="detail-card">
+    <div class="detail-hdr">
+      <div>
+        <div class="detail-title">{{ item.datos.titulo or item.codigo }}</div>
+        <div class="detail-code">{{ item.codigo }}</div>
+      </div>
+      <span class="tipo-badge tipo-{{ item.tipo }}" style="flex-shrink:0">
+        {% if item.tipo=="licitacion" %}📄 Licitación{% else %}🛒 OC{% endif %}
+      </span>
+    </div>
+
+    <!-- Monto -->
+    {% if item.monto_clp %}
+    <div class="field-row">
+      <span class="f-label">Monto estimado</span>
+      <span class="f-value f-monto">${{ "{:,.0f}".format(item.monto_clp) }} CLP</span>
+    </div>
+    {% endif %}
+
+    <!-- Estado -->
+    {% if item.estado %}
+    <div class="field-row">
+      <span class="f-label">Estado</span>
+      <span class="f-value"><span class="tag">{{ item.estado }}</span></span>
+    </div>
+    {% endif %}
+
+    <!-- Organismo -->
+    {% if item.datos.organismo %}
+    <div class="field-row">
+      <span class="f-label">Organismo</span>
+      <span class="f-value">{{ item.datos.organismo }}</span>
+    </div>
+    {% endif %}
+
+    <!-- Región -->
+    {% if item.region %}
+    <div class="field-row">
+      <span class="f-label">Región</span>
+      <span class="f-value">
+        <span class="tag">R{{ item.region }}</span>
+        {% if item.datos.nombre_region %} {{ item.datos.nombre_region }}{% endif %}
+      </span>
+    </div>
+    {% endif %}
+
+    <!-- Fecha publicación -->
+    {% if item.datos.fecha_publicacion %}
+    <div class="field-row">
+      <span class="f-label">Publicación</span>
+      <span class="f-value f-mono">{{ item.datos.fecha_publicacion }}</span>
+    </div>
+    {% endif %}
+
+    <!-- Fecha cierre -->
+    {% if item.datos.fecha_cierre %}
+    <div class="field-row">
+      <span class="f-label">Cierre</span>
+      <span class="f-value f-mono">{{ item.datos.fecha_cierre }}</span>
+    </div>
+    {% endif %}
+
+    <!-- Descripción -->
+    {% if item.datos.descripcion %}
+    <div class="field-row">
+      <span class="f-label">Descripción</span>
+      <span class="f-value" style="font-size:12px;line-height:1.5">{{ item.datos.descripcion }}</span>
+    </div>
+    {% endif %}
+
+    <!-- Códigos producto -->
+    {% if item.datos.codigo_producto %}
+    <div class="field-row">
+      <span class="f-label">Categorías</span>
+      <span class="f-value" style="display:flex;gap:4px;flex-wrap:wrap">
+        {% for c in item.datos.codigo_producto %}<span class="tag">{{ c }}</span>{% endfor %}
+      </span>
+    </div>
+    {% endif %}
+
+    <!-- Link -->
+    {% if item.datos.link_detalle %}
+    <div class="field-row">
+      <span class="f-label">Fuente</span>
+      <span class="f-value f-link"><a href="{{ item.datos.link_detalle }}" target="_blank">mercadopublico.cl ↗</a></span>
+    </div>
+    {% endif %}
+
+    {% if item.datos.link_detalle %}
+    <a href="{{ item.datos.link_detalle }}" target="_blank" class="cta-btn">🔗 Ver en Mercado Público</a>
+    {% endif %}
+
+    <!-- JSON raw -->
+    <div style="padding:0 22px 6px;font-family:var(--font-mono);font-size:10px;color:var(--text-muted)">DATOS RAW</div>
+    <details style="padding:0 22px 20px">
+      <summary style="cursor:pointer;font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">▶ Expandir JSON</summary>
+      <pre class="json-view">{{ item.datos | tojson(indent=2) }}</pre>
+    </details>
+  </div>
+
+  <!-- Sidebar -->
+  <div>
+    <div class="sidebar-card">
+      <div class="side-hdr">📌 Metadata</div>
+      <div class="side-row">
+        <span class="s-label">ID Snapshot</span>
+        <span class="s-value s-mono">#{{ item.id }}</span>
+      </div>
+      <div class="side-row">
+        <span class="s-label">Tipo</span>
+        <span class="s-value">{{ item.tipo }}</span>
+      </div>
+      <div class="side-row">
+        <span class="s-label">Sincronizado</span>
+        <span class="s-value s-mono">{{ item.fecha_sinc.strftime('%d-%m-%Y %H:%M') if item.fecha_sinc else '—' }}</span>
+      </div>
+      <div class="side-row">
+        <span class="s-label">Datos</span>
+        {% if item.enriquecido %}
+        <span class="enr-badge enr-full">✓ Completos (región/monto)</span>
+        {% else %}
+        <span class="enr-badge enr-partial">⚡ Solo listado</span>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if not item.enriquecido %}
+    <div class="sidebar-card">
+      <div class="side-hdr">⚡ Obtener datos completos</div>
+      <div style="padding:14px;font-size:12px;color:var(--text-muted);line-height:1.6">
+        Este registro tiene solo datos del listado (título, estado, fecha cierre).
+        Para obtener región, monto y organismo:
+        <code style="display:block;margin-top:8px;background:var(--surface-2);padding:8px;border-radius:4px;font-size:11px;color:var(--accent)">
+          python scripts/enriquecer_bd.py
+        </code>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="sidebar-card">
+      <div class="side-hdr">🔗 Acciones</div>
+      <div style="padding:14px;display:flex;flex-direction:column;gap:8px">
+        {% if item.datos.link_detalle %}
+        <a href="{{ item.datos.link_detalle }}" target="_blank" class="btn btn-primary" style="text-align:center;font-size:12px">
+          Ver en Mercado Público ↗
+        </a>
+        {% endif %}
+        <a href="/licitaciones" class="btn btn-ghost" style="text-align:center;font-size:12px">← Volver al listado</a>
+        <a href="/reglas/nueva" class="btn btn-ghost" style="text-align:center;font-size:12px">+ Crear regla para esto</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

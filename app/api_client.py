@@ -293,70 +293,17 @@ class MercadoPublicoClient:
         """
         Oportunidades de compra ágil (tipo=CO).
 
-        NOTA CRÍTICA: La API de Mercado Público devuelve HTTP 400 cuando se
-        combinan los parámetros `fecha` + `tipo=CO` en la misma petición.
-        Solución: consultar solo por estado (sin fecha) y filtrar por
-        fecha_publicacion en memoria después de normalizar.
+        NO DISPONIBLE: La API pública v1 de Mercado Público retorna HTTP 400
+        para cualquier variante con tipo=CO (con fecha, con estado, o solo).
+        El tipo compra_agil es omitido automáticamente del ciclo.
         """
-        # NO pasar fecha + tipo=CO juntos → provoca 400 Bad Request en la API
-        params: Dict[str, Any] = {
-            "tipo": "CO",
-            "estado": estado or "publicada",
-        }
+        logger.warning(
+            "compra_agil omitida: la API pública v1 no soporta tipo=CO (HTTP 400). "
+            "Desactiva las reglas de tipo compra_agil o espera soporte de la API."
+        )
+        return
+        yield  # hace de esta función un generador vacío (type hint)
 
-        # Si viene fecha_desde, la guardamos para filtrar en memoria post-normalización
-        from datetime import datetime as _dt
-        fecha_filtro: Optional[_dt] = None
-        if fecha_desde:
-            try:
-                fecha_filtro = _dt.strptime(fecha_desde, "%d%m%Y")
-            except ValueError:
-                pass
-
-        page = 1
-        total_fetched = 0
-
-        while True:
-            params["pagina"] = page
-            try:
-                data = self._get("publico/licitaciones.json", params.copy())
-            except QuotaExhaustedException:
-                logger.error("Cuota agotada obteniendo oportunidades.")
-                return
-            except ApiClientException as e:
-                logger.error("Error obteniendo oportunidades página %d: %s", page, e)
-                return
-
-            items: List[Dict] = data.get("Listado") or []
-            if not items:
-                break
-
-            for item in items:
-                item["_api_tipo"] = "compra_agil"
-
-                # Filtro por fecha en memoria (compensar que la API no acepta fecha+tipo)
-                if fecha_filtro:
-                    fp_raw = item.get("FechaPublicacion") or item.get("FechaCreacion") or ""
-                    from app.normalizer import _parse_date
-                    fp_str = _parse_date(fp_raw)
-                    if fp_str:
-                        try:
-                            fp = _dt.strptime(fp_str, "%Y-%m-%d")
-                            if fp < fecha_filtro:
-                                continue   # más antigua que el filtro → saltar
-                        except ValueError:
-                            pass
-
-                yield item
-                total_fetched += 1
-
-            logger.debug("Oportunidades: página %d, %d ítems (total=%d)", page, len(items), total_fetched)
-
-            if len(items) < 1000:
-                break
-            page += 1
-
-    # ── Datos maestros ────────────────────────────────────────────────────────
 
     def get_regiones(self) -> List[Dict]:
         """Regiones de Chile (cache 24 h)."""

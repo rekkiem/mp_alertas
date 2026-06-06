@@ -1,0 +1,470 @@
+{% extends "base.html" %}
+{% block title %}Licitaciones ({{ total_all | format_number }}){% endblock %}
+
+{% block extra_head %}
+<style>
+/* ══ Layout ══════════════════════════════════════════════════════════════ */
+.lic-header    { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:18px; flex-wrap:wrap; gap:10px; }
+.lic-title     { font-size:22px; font-weight:800; color:var(--text); }
+.lic-subtitle  { font-size:12px; color:var(--text-muted); margin-top:3px; font-family:var(--font-mono); }
+.hdr-actions   { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+
+/* ══ KPI strip ═══════════════════════════════════════════════════════════ */
+.kpi-strip  { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:16px; }
+@media(max-width:900px){ .kpi-strip{ grid-template-columns:repeat(3,1fr); } }
+.kpi        { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg);
+              padding:12px 16px; position:relative; overflow:hidden; }
+.kpi::before{ content:''; position:absolute; top:0; left:0; right:0; height:2px; }
+.kpi.amber::before { background:var(--accent); }
+.kpi.green::before { background:var(--accent-2); }
+.kpi.blue::before  { background:var(--info); }
+.kpi.red::before   { background:var(--danger); }
+.kpi.purple::before{ background:#a78bfa; }
+.kpi-label  { font-family:var(--font-mono); font-size:9px; text-transform:uppercase; letter-spacing:.6px; color:var(--text-muted); margin-bottom:5px; }
+.kpi-num    { font-family:var(--font-mono); font-size:20px; font-weight:700; color:var(--text); line-height:1; }
+.kpi-num.amber { color:var(--accent); }
+.kpi-num.green { color:var(--accent-2); }
+.kpi-num.blue  { color:var(--info); }
+.kpi-sub    { font-size:10px; color:var(--text-muted); margin-top:3px; font-family:var(--font-mono); }
+
+/* ══ Filtros ══════════════════════════════════════════════════════════════ */
+.filter-panel  { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); margin-bottom:16px; }
+.fp-header     { display:flex; align-items:center; justify-content:space-between; padding:12px 16px;
+                 border-bottom:1px solid var(--border); cursor:pointer; user-select:none; }
+.fp-title      { font-family:var(--font-mono); font-size:11px; text-transform:uppercase; letter-spacing:.6px; color:var(--text-muted); display:flex; align-items:center; gap:8px; }
+.active-badge  { background:var(--accent); color:#1c1917; border-radius:10px; padding:1px 7px; font-size:9px; font-weight:700; }
+.fp-body       { padding:14px 16px; display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+@media(max-width:900px){ .fp-body{ grid-template-columns:repeat(2,1fr); } }
+.fp-row-wide   { grid-column:1/-1; display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+@media(max-width:900px){ .fp-row-wide{ grid-template-columns:repeat(2,1fr); } }
+.fg            { display:flex; flex-direction:column; gap:4px; }
+.fg-span2      { grid-column:span 2; }
+.fg label      { font-family:var(--font-mono); font-size:10px; text-transform:uppercase; letter-spacing:.4px; color:var(--text-muted); }
+.fg input, .fg select {
+  background:var(--surface-2); border:1px solid var(--border-2); color:var(--text);
+  border-radius:var(--radius); padding:7px 10px; font-size:12px; outline:none;
+  transition:border-color .15s; width:100%; box-sizing:border-box; }
+.fg input:focus, .fg select:focus { border-color:var(--accent); }
+.fg select option { background:var(--surface-2); }
+.fp-footer { padding:10px 16px; border-top:1px solid var(--border); display:flex; gap:8px; justify-content:flex-end; }
+
+/* ══ Resultados bar ══════════════════════════════════════════════════════ */
+.result-bar  { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; gap:8px; }
+.result-info { font-family:var(--font-mono); font-size:12px; color:var(--text-muted); }
+.result-info strong { color:var(--accent); }
+.sort-bar    { display:flex; align-items:center; gap:8px; font-size:12px; }
+.sort-label  { font-family:var(--font-mono); font-size:10px; color:var(--text-dim); text-transform:uppercase; }
+.sort-btn    { padding:4px 10px; border-radius:var(--radius); border:1px solid var(--border); background:var(--surface-2);
+               color:var(--text-muted); cursor:pointer; font-size:11px; font-family:var(--font-mono); text-decoration:none; transition:all .15s; }
+.sort-btn:hover, .sort-btn.active { background:var(--accent-dim); color:var(--accent); border-color:var(--accent); }
+
+/* ══ Tabla ════════════════════════════════════════════════════════════════ */
+.table-wrap  { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; }
+table        { width:100%; border-collapse:collapse; font-size:12px; }
+thead        { background:var(--surface-2); border-bottom:1px solid var(--border); position:sticky; top:0; z-index:5; }
+th           { padding:9px 12px; text-align:left; font-family:var(--font-mono); font-size:9px;
+               text-transform:uppercase; letter-spacing:.6px; color:var(--text-muted); white-space:nowrap; }
+td           { padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:middle; }
+tr:last-child td { border-bottom:none; }
+tbody tr:hover td { background:rgba(255,255,255,.025); }
+
+/* colores alternos */
+.t-tipo   { white-space:nowrap; }
+.badge    { display:inline-flex; align-items:center; gap:3px; padding:2px 7px; border-radius:4px;
+            font-family:var(--font-mono); font-size:9px; font-weight:700; text-transform:uppercase; white-space:nowrap; }
+.badge-lic { background:rgba(88,166,255,.12); color:var(--info); border:1px solid rgba(88,166,255,.2); }
+.badge-oc  { background:var(--accent-dim); color:var(--accent); border:1px solid rgba(230,168,23,.2); }
+
+.t-cod     { font-family:var(--font-mono); font-size:10px; color:var(--text-muted); }
+.t-titulo  { max-width:260px; color:var(--text); font-size:12px; overflow:hidden;
+             display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; line-height:1.4; }
+.t-org     { font-size:10px; color:var(--text-muted); margin-top:2px; }
+
+.t-est     { white-space:nowrap; }
+.est-badge { display:inline-block; padding:2px 7px; border-radius:3px; font-family:var(--font-mono); font-size:9px; font-weight:600; }
+.est-pub   { background:rgba(63,185,80,.12); color:var(--accent-2); }
+.est-adj   { background:rgba(88,166,255,.12); color:var(--info); }
+.est-cer   { background:rgba(139,148,158,.1); color:var(--text-dim); }
+.est-des   { background:rgba(248,81,73,.1); color:var(--danger); }
+.est-rev   { background:rgba(248,81,73,.1); color:var(--danger); }
+.est-other { background:var(--surface-2); color:var(--text-muted); }
+
+.t-monto   { font-family:var(--font-mono); font-size:11px; color:var(--accent-2); white-space:nowrap; }
+.t-null    { font-family:var(--font-mono); font-size:10px; color:var(--text-dim); }
+
+.dot       { display:inline-block; width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+.dot-full  { background:var(--accent-2); box-shadow:0 0 4px rgba(63,185,80,.5); }
+.dot-none  { background:var(--border-2); }
+
+.act-link  { display:inline-flex; align-items:center; gap:3px; padding:3px 7px; border-radius:var(--radius);
+             border:1px solid transparent; text-decoration:none; font-family:var(--font-mono); font-size:10px;
+             transition:all .15s; white-space:nowrap; }
+.act-link-pri  { color:var(--accent); }
+.act-link-pri:hover  { background:var(--accent-dim); border-color:var(--accent); }
+.act-link-sec  { color:var(--text-dim); }
+.act-link-sec:hover  { background:var(--surface-2); border-color:var(--border-2); color:var(--text-muted); }
+
+/* ══ Paginador ═══════════════════════════════════════════════════════════ */
+.pager      { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-top:1px solid var(--border); flex-wrap:wrap; gap:8px; }
+.pager-info { font-family:var(--font-mono); font-size:11px; color:var(--text-muted); }
+.pager-pp   { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--text-muted); font-family:var(--font-mono); }
+.pager-pp select { background:var(--surface-2); border:1px solid var(--border); color:var(--text); border-radius:var(--radius); padding:3px 6px; font-size:11px; outline:none; }
+.pager-nums { display:flex; gap:3px; }
+.pg         { padding:4px 9px; border-radius:var(--radius); background:var(--surface-2); border:1px solid var(--border);
+              color:var(--text-muted); text-decoration:none; font-size:11px; font-family:var(--font-mono); transition:all .15s; }
+.pg:hover,.pg.on { background:var(--accent-dim); color:var(--accent); border-color:var(--accent); }
+.pg.off     { opacity:.3; pointer-events:none; }
+
+/* ══ Empty state ═════════════════════════════════════════════════════════ */
+.empty      { text-align:center; padding:60px 20px; }
+.empty-ico  { font-size:40px; margin-bottom:12px; }
+.empty h3   { color:var(--text); font-size:16px; margin-bottom:8px; }
+.empty p    { color:var(--text-muted); font-size:13px; line-height:1.6; }
+.empty code { background:var(--surface-2); padding:4px 8px; border-radius:4px; font-size:12px; color:var(--accent); }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% set n_filtros = (1 if q else 0)+(1 if f_tipo else 0)+(1 if f_estado else 0)+(1 if f_region else 0)+(1 if f_monto_min else 0)+(1 if f_monto_max else 0)+(1 if f_fecha_d else 0)+(1 if f_fecha_h else 0)+(1 if f_sinc_d else 0)+(1 if f_enr else 0)+(1 if f_org else 0) %}
+{% set qs_base = "q="~q~"&tipo="~f_tipo~"&estado="~f_estado~"&region="~f_region~"&mmin="~f_monto_min~"&mmax="~f_monto_max~"&fd="~f_fecha_d~"&fh="~f_fecha_h~"&sd="~f_sinc_d~"&enr="~f_enr~"&org="~f_org~"&pp="~per_page~"&orden="~orden %}
+
+<!-- Header -->
+<div class="lic-header">
+  <div>
+    <h1 class="lic-title">📋 Licitaciones</h1>
+    <p class="lic-subtitle">{{ total_all | format_number }} registros en BD · {{ con_datos | format_number }} con datos completos</p>
+  </div>
+  <div class="hdr-actions">
+    <a href="/licitaciones/export.csv?{{ qs_base }}" class="btn btn-ghost" style="font-size:12px">
+      ⬇ Exportar CSV
+    </a>
+    {% if n_filtros > 0 %}
+    <a href="/licitaciones" class="btn btn-ghost" style="font-size:12px">✕ Limpiar ({{ n_filtros }})</a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- KPIs -->
+<div class="kpi-strip">
+  <div class="kpi amber">
+    <div class="kpi-label">Total en BD</div>
+    <div class="kpi-num amber">{{ total_all | format_number }}</div>
+    <div class="kpi-sub">{{ (total_all - con_datos) | format_number }} solo listado</div>
+  </div>
+  <div class="kpi green">
+    <div class="kpi-label">Datos completos</div>
+    <div class="kpi-num green">{{ con_datos | format_number }}</div>
+    <div class="kpi-sub">con región y monto</div>
+  </div>
+  <div class="kpi blue">
+    <div class="kpi-label">Monto total CLP</div>
+    <div class="kpi-num blue" style="font-size:15px">${{ (monto_total / 1e9) | round(1) }}B</div>
+    <div class="kpi-sub">${{ (monto_prom / 1e6) | round(1) }}M promedio</div>
+  </div>
+  <div class="kpi purple">
+    <div class="kpi-label">Resultados filtro</div>
+    <div class="kpi-num" style="color:#a78bfa">{{ total | format_number }}</div>
+    <div class="kpi-sub">{{ total_paginas }} página(s)</div>
+  </div>
+  <div class="kpi red">
+    <div class="kpi-label">Sin enriquecer</div>
+    <div class="kpi-num" style="{% if sin_datos>0 %}color:var(--danger){% else %}color:var(--accent-2){% endif %}">{{ sin_datos | format_number }}</div>
+    <div class="kpi-sub">{% if sin_datos>0 %}ejecuta enriquecer_bd.py{% else %}✓ todo completo{% endif %}</div>
+  </div>
+</div>
+
+<!-- Panel de filtros -->
+<div class="filter-panel">
+  <div class="fp-header" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'grid':'none'">
+    <span class="fp-title">
+      🔍 Filtros
+      {% if n_filtros > 0 %}<span class="active-badge">{{ n_filtros }} activos</span>{% endif %}
+    </span>
+    <span style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono)">▾ expandir</span>
+  </div>
+
+  <form method="GET" action="/licitaciones" id="filtros-form">
+  <div class="fp-body" {% if n_filtros == 0 %}style="display:none"{% endif %}>
+
+    <!-- Fila 1: búsqueda texto + tipo -->
+    <div class="fg fg-span2">
+      <label>🔎 Buscar título, código u organismo</label>
+      <input type="text" name="q" value="{{ q }}" placeholder="ej: software, desfibrilador, consultoría TI…">
+    </div>
+    <div class="fg">
+      <label>Organismo comprador</label>
+      <input type="text" name="org" value="{{ f_org }}" placeholder="ej: municipalidad, MINSAL…">
+    </div>
+    <div class="fg">
+      <label>Tipo de entidad</label>
+      <select name="tipo">
+        <option value="">Todos los tipos</option>
+        <option value="licitacion"   {% if f_tipo=="licitacion"   %}selected{% endif %}>📄 Licitación</option>
+        <option value="orden_compra" {% if f_tipo=="orden_compra" %}selected{% endif %}>🛒 Orden de Compra</option>
+      </select>
+    </div>
+
+    <!-- Fila 2: estado + región -->
+    <div class="fg">
+      <label>Estado</label>
+      <select name="estado">
+        <option value="">Todos los estados</option>
+        {% for e, n in estados_opts %}
+        <option value="{{ e }}" {% if f_estado==e %}selected{% endif %}>{{ e }} ({{ n | format_number }})</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="fg">
+      <label>Región</label>
+      <select name="region">
+        <option value="">Todas las regiones</option>
+        {% for cod, nombre, n in regiones_opts %}
+        <option value="{{ cod }}" {% if f_region==cod|string %}selected{% endif %}>R{{ cod }} · {{ nombre }} ({{ n | format_number }})</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="fg">
+      <label>Datos disponibles</label>
+      <select name="enr">
+        <option value="">Todos</option>
+        <option value="si" {% if f_enr=="si" %}selected{% endif %}>✅ Con región/monto</option>
+        <option value="no" {% if f_enr=="no" %}selected{% endif %}>⚡ Solo listado</option>
+      </select>
+    </div>
+    <div class="fg">
+      <label>Mostrar por página</label>
+      <select name="pp" onchange="document.getElementById('filtros-form').submit()">
+        {% for n in [25,50,100,200] %}
+        <option value="{{ n }}" {% if per_page==n %}selected{% endif %}>{{ n }} por página</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <!-- Fila 3: rangos -->
+    <div class="fg">
+      <label>Monto mínimo (CLP)</label>
+      <input type="number" name="mmin" value="{{ f_monto_min }}" placeholder="ej: 1000000" min="0">
+    </div>
+    <div class="fg">
+      <label>Monto máximo (CLP)</label>
+      <input type="number" name="mmax" value="{{ f_monto_max }}" placeholder="ej: 50000000" min="0">
+    </div>
+    <div class="fg">
+      <label>Fecha cierre desde</label>
+      <input type="date" name="fd" value="{{ f_fecha_d }}">
+    </div>
+    <div class="fg">
+      <label>Fecha cierre hasta</label>
+      <input type="date" name="fh" value="{{ f_fecha_h }}">
+    </div>
+
+    <input type="hidden" name="orden" value="{{ orden }}">
+    <input type="hidden" name="page" value="1">
+  </div>
+
+  <div class="fp-footer" {% if n_filtros == 0 %}style="display:none"{% endif %} id="fp-footer">
+    <a href="/licitaciones" class="btn btn-ghost" style="font-size:12px">✕ Limpiar todo</a>
+    <button type="submit" class="btn btn-primary" style="font-size:12px">Aplicar filtros →</button>
+  </div>
+  </form>
+</div>
+
+<!-- Barra resultados + ordenamiento -->
+<div class="result-bar">
+  <span class="result-info">
+    <strong>{{ total | format_number }}</strong> resultado(s)
+    {% if n_filtros > 0 %} con {{ n_filtros }} filtro(s) activo(s){% endif %}
+    · mostrando {{ (page-1)*per_page+1 }}–{{ [page*per_page, total]|min }}
+  </span>
+  <div class="sort-bar">
+    <span class="sort-label">Orden:</span>
+    {% for o, label in [("sinc_desc","↓ Recientes"),("fecha_desc","↓ Fecha"),("monto_desc","↓ Monto"),("titulo_asc","A→Z Título")] %}
+    <a href="/licitaciones?{{ qs_base|replace('orden='~orden,'orden='~o) }}&page=1"
+       class="sort-btn {% if orden==o %}active{% endif %}">{{ label }}</a>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Tabla -->
+<div class="table-wrap">
+{% if rows %}
+<div style="overflow-x:auto">
+<table>
+  <thead>
+    <tr>
+      <th>Tipo</th>
+      <th>Código</th>
+      <th>Título / Organismo</th>
+      <th>Estado</th>
+      <th>Región</th>
+      <th>Monto CLP</th>
+      <th>Fecha cierre</th>
+      <th>Sinc.</th>
+      <th title="Datos completos">●</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for r in rows %}
+  <tr>
+    <!-- Tipo -->
+    <td class="t-tipo">
+      {% if r.tipo == "licitacion" %}
+      <span class="badge badge-lic">📄 Lic</span>
+      {% else %}
+      <span class="badge badge-oc">🛒 OC</span>
+      {% endif %}
+    </td>
+
+    <!-- Código -->
+    <td><span class="t-cod">{{ r.codigo }}</span></td>
+
+    <!-- Título -->
+    <td>
+      <div class="t-titulo" title="{{ r.titulo }}">{{ r.titulo }}</div>
+      {% if r.organismo %}<div class="t-org">{{ r.organismo | truncate(45, True, '…') }}</div>{% endif %}
+    </td>
+
+    <!-- Estado -->
+    <td class="t-est">
+      {% if r.estado %}
+      {% set ec = r.estado | lower %}
+      <span class="est-badge
+        {% if 'publica' in ec %}est-pub
+        {% elif 'adjudica' in ec %}est-adj
+        {% elif 'cerrada' in ec or 'cierre' in ec %}est-cer
+        {% elif 'desierta' in ec %}est-des
+        {% elif 'revocada' in ec or 'suspendida' in ec %}est-rev
+        {% else %}est-other{% endif %}">
+        {{ r.estado }}
+      </span>
+      {% else %}<span class="t-null">—</span>{% endif %}
+    </td>
+
+    <!-- Región -->
+    <td>
+      {% if r.region %}
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--accent)">R{{ r.region }}</div>
+      <div style="font-size:10px;color:var(--text-muted)">{{ r.nombre_region | truncate(22,True,'') }}</div>
+      {% else %}<span class="t-null">—</span>{% endif %}
+    </td>
+
+    <!-- Monto -->
+    <td>
+      {% if r.monto_clp %}
+      <span class="t-monto">${{ "{:,.0f}".format(r.monto_clp) }}</span>
+      {% else %}<span class="t-null">—</span>{% endif %}
+    </td>
+
+    <!-- Fecha cierre -->
+    <td>
+      {% if r.fecha_cierre %}
+      <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted)">
+        {{ r.fecha_cierre[:10] }}</span>
+      {% else %}<span class="t-null">—</span>{% endif %}
+    </td>
+
+    <!-- Sincronizado -->
+    <td>
+      <span style="font-family:var(--font-mono);font-size:9px;color:var(--text-dim)">
+        {{ r.fecha_sinc[:10] if r.fecha_sinc else "—" }}
+      </span>
+    </td>
+
+    <!-- Dot datos completos -->
+    <td style="text-align:center">
+      <span class="dot {{ 'dot-full' if r.enriquecido else 'dot-none' }}"
+            title="{{ 'Datos completos' if r.enriquecido else 'Solo listado' }}"></span>
+    </td>
+
+    <!-- Acciones -->
+    <td>
+      <div style="display:flex;gap:4px">
+        <a href="/licitaciones/{{ r.id }}" class="act-link act-link-pri">Ver →</a>
+        {% if r.link %}
+        <a href="{{ r.link }}" target="_blank" rel="noopener" class="act-link act-link-sec" title="Ver en mercadopublico.cl">MP↗</a>
+        {% endif %}
+      </div>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<!-- Paginador -->
+{% if total_paginas > 1 %}
+<div class="pager">
+  <span class="pager-info">{{ (page-1)*per_page+1 }}–{{ [page*per_page,total]|min }} de {{ total | format_number }}</span>
+  <div class="pager-nums">
+    <a href="/licitaciones?{{ qs_base }}&page=1"           class="pg {% if page==1 %}off{% endif %}">«</a>
+    <a href="/licitaciones?{{ qs_base }}&page={{ page-1 }}" class="pg {% if page==1 %}off{% endif %}">‹</a>
+    {% for p in range([1,page-2]|max, [total_paginas+1,page+3]|min) %}
+    <a href="/licitaciones?{{ qs_base }}&page={{ p }}"     class="pg {% if p==page %}on{% endif %}">{{ p }}</a>
+    {% endfor %}
+    {% if page + 3 < total_paginas %}<span class="pg" style="pointer-events:none">…</span>{% endif %}
+    {% if page + 2 < total_paginas %}
+    <a href="/licitaciones?{{ qs_base }}&page={{ total_paginas }}" class="pg">{{ total_paginas }}</a>
+    {% endif %}
+    <a href="/licitaciones?{{ qs_base }}&page={{ page+1 }}"       class="pg {% if page==total_paginas %}off{% endif %}">›</a>
+    <a href="/licitaciones?{{ qs_base }}&page={{ total_paginas }}" class="pg {% if page==total_paginas %}off{% endif %}">»</a>
+  </div>
+  <div class="pager-pp">
+    <span>Filas:</span>
+    <select onchange="window.location='/licitaciones?{{ qs_base|replace('pp='~per_page,'pp=') }}pp='+this.value+'&page=1'">
+      {% for n in [25,50,100,200] %}
+      <option value="{{ n }}" {% if per_page==n %}selected{% endif %}>{{ n }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</div>
+{% endif %}
+
+{% else %}
+<!-- Empty state -->
+<div class="empty">
+  <div class="empty-ico">📋</div>
+  <h3>{% if n_filtros > 0 %}Sin resultados{% else %}Base de datos vacía{% endif %}</h3>
+  <p>
+    {% if n_filtros > 0 %}
+      Ningún registro coincide con los filtros activos.<br>
+      <a href="/licitaciones" class="link">Limpiar todos los filtros →</a>
+    {% else %}
+      Aún no hay datos sincronizados. Ejecuta en la terminal:<br><br>
+      <code>python scripts/poblar_bd.py --dias 7 --tipo licitacion</code>
+    {% endif %}
+  </p>
+</div>
+{% endif %}
+</div>
+
+<!-- Leyenda inferior -->
+<div style="display:flex;align-items:center;gap:20px;margin-top:10px;font-size:10px;color:var(--text-dim);font-family:var(--font-mono)">
+  <span><span class="dot dot-full"></span> Datos completos (región, monto, organismo)</span>
+  <span><span class="dot dot-none"></span> Solo listado — usa <code style="color:var(--accent)">enriquecer_bd.py</code></span>
+  <span style="margin-left:auto">CSV exporta hasta 10,000 registros con los filtros actuales</span>
+</div>
+
+<script>
+// Auto-expandir panel si hay filtros activos
+(function(){
+  var n = {{ n_filtros }};
+  if(n > 0){
+    var body = document.querySelector('.fp-body');
+    var foot = document.getElementById('fp-footer');
+    if(body) body.style.display = 'grid';
+    if(foot) foot.style.display = 'flex';
+  }
+  // Toggle panel
+  document.querySelector('.fp-header').addEventListener('click', function(){
+    var body = document.querySelector('.fp-body');
+    var foot = document.getElementById('fp-footer');
+    var open = body.style.display !== 'none';
+    body.style.display = open ? 'none' : 'grid';
+    if(foot) foot.style.display = open ? 'none' : 'flex';
+    this.querySelector('span:last-child').textContent = open ? '▾ expandir' : '▴ colapsar';
+  });
+})();
+</script>
+{% endblock %}
