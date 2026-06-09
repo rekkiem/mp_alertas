@@ -32,6 +32,23 @@ logging.basicConfig(
         logging.FileHandler("logs/app.log", encoding="utf-8"),
     ],
 )
+# Suprimir ANSI color codes en el archivo de log sin afectar el servidor
+import os
+# Configurar werkzeug para que no use colores en el log file
+_wz_logger = logging.getLogger("werkzeug")
+_wz_logger.propagate = True
+# Handler personalizado que filtra secuencias ANSI del file log
+import re as _re
+class _StripAnsiFilter(logging.Filter):
+    _pat = _re.compile(r"\[[0-9;]*m")
+    def filter(self, record):
+        if isinstance(record.msg, str):
+            record.msg = self._pat.sub("", record.msg)
+        return True
+# Aplicar solo al FileHandler
+for _h in logging.root.handlers:
+    if isinstance(_h, logging.FileHandler):
+        _h.addFilter(_StripAnsiFilter())
 logger = logging.getLogger("main")
 
 
@@ -60,10 +77,12 @@ def run_once():
     init_db()
     try:
         stats = ejecutar_ciclo_completo()
+        # FIX: usar la clave correcta del dict de stats del scheduler
+        alertas_n = stats.get("alertas_nuevas", stats.get("alertas_generadas", 0))
         logger.info(
-            "Ciclo completado: %d reglas evaluadas, %d alertas generadas.",
+            "Ciclo completado: %d reglas evaluadas, %d alertas nuevas (total ciclo).",
             stats.get("reglas_evaluadas", 0),
-            stats.get("alertas_generadas", 0),
+            alertas_n,
         )
         sys.exit(0)
     except Exception as e:

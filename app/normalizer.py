@@ -201,7 +201,7 @@ def normalizar_orden_compra(raw: Dict) -> Dict:
         "codigo": codigo,
         "titulo": raw.get("Nombre") or raw.get("Descripcion") or "",
         "descripcion": raw.get("Descripcion") or "",
-        "estado": _resolve_estado(raw),
+        "estado": _resolve_estado(raw, es_oc=True),
         "region": region,
         "nombre_region": nombre_region,
         "organismo": comprador.get("NombreOrganismo"),
@@ -229,7 +229,8 @@ def normalizar_oportunidad(raw: Dict) -> Dict:
 
 # ── Mapa CodigoEstado → texto legible ───────────────────────────────────────
 # La API de listado devuelve solo CodigoEstado (int/str) sin el campo Estado
-_ESTADO_MAP = {
+# CodigoEstado para LICITACIONES
+_ESTADO_LIC_MAP = {
     "1": "Borrador",
     "2": "Publicada",
     "3": "Cerrada",
@@ -239,18 +240,47 @@ _ESTADO_MAP = {
     "7": "Suspendida",
     "8": "Publicada",
     "9": "Publicada",
+    "16": "Desierta (Admin)",
+    "17": "Revocada (Admin)",
+    "18": "Suspendida (Admin)",
 }
 
-def _resolve_estado(raw: Dict) -> str:
+# CodigoEstado para ÓRDENES DE COMPRA (códigos distintos a licitaciones)
+_ESTADO_OC_MAP = {
+    "1":  "Enviada",
+    "2":  "Aceptada",
+    "3":  "Rechazada",
+    "4":  "Cancelada",
+    "5":  "Enviada",
+    "6":  "Aceptada",
+    "7":  "Parcialmente Recibida",
+    "8":  "Recibida",
+    "9":  "Cerrada",
+    "10": "Cancelada",
+    "11": "Pendiente",
+    "12": "Procesando",
+    "13": "Enviada al Proveedor",
+    "14": "Entregada",
+    "15": "Pagada",
+}
+
+# Unificado: si no está en ninguno, retorna el código para investigar
+_ESTADO_MAP = {**_ESTADO_LIC_MAP}
+
+def _resolve_estado(raw: Dict, es_oc: bool = False) -> str:
     """
     Resuelve el estado desde Estado (texto) o CodigoEstado (int/str).
     La API de listado solo devuelve CodigoEstado; la de detalle devuelve Estado.
+    Usa el mapa correcto según si es OC o licitación.
     """
     estado = raw.get("Estado") or ""
     if estado:
         return estado
     codigo = str(raw.get("CodigoEstado") or "").strip()
-    return _ESTADO_MAP.get(codigo, f"Estado {codigo}" if codigo else "")
+    if not codigo:
+        return ""
+    mapa = _ESTADO_OC_MAP if es_oc else _ESTADO_LIC_MAP
+    return mapa.get(codigo, _ESTADO_MAP.get(codigo, f"Estado {codigo}"))
 
 
 # ── Dispatcher ────────────────────────────────────────────────────────────────

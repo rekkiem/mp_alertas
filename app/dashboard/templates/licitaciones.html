@@ -381,7 +381,8 @@ tbody tr:hover td { background:rgba(255,255,255,.025); }
     <!-- Acciones -->
     <td>
       <div style="display:flex;gap:4px">
-        <a href="/licitaciones/{{ r.id }}" class="act-link act-link-pri">Ver →</a>
+        <a href="/licitaciones/{{ r.id }}" class="act-link act-link-pri">Ver</a>
+        <a href="/licitaciones/{{ r.id }}/analizar" class="act-link" style="color:var(--accent-2);border-color:transparent" title="Analizar propuesta">📊</a>
         {% if r.link %}
         <a href="{{ r.link }}" target="_blank" rel="noopener" class="act-link act-link-sec" title="Ver en mercadopublico.cl">MP↗</a>
         {% endif %}

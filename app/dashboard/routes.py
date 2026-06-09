@@ -717,6 +717,7 @@ def licitaciones_export_csv():
     f_enr       = request.args.get("enr", "").strip()
     orden       = request.args.get("orden","sinc_desc")
 
+    # FIX: serializar dentro del contexto de sesión para evitar DetachedInstanceError
     with get_db() as db:
         base_q = db.query(LicitacionSnapshot)
         if f_tipo:   base_q = base_q.filter(LicitacionSnapshot.tipo == f_tipo)
@@ -749,7 +750,25 @@ def licitaciones_export_csv():
             "monto_desc": LicitacionSnapshot.monto_clp.desc().nulls_last(),
             "fecha_desc": LicitacionSnapshot.fecha_publicacion.desc().nulls_last(),
         }
-        snaps = base_q.order_by(orden_map.get(orden, LicitacionSnapshot.fecha_sincronizacion.desc())).limit(10000).all()
+        # Serializar a dicts DENTRO de la sesión para evitar DetachedInstanceError
+        snaps_raw = base_q.order_by(
+            orden_map.get(orden, LicitacionSnapshot.fecha_sincronizacion.desc())
+        ).limit(10000).all()
+
+        filas_csv = []
+        for s in snaps_raw:
+            d = s.datos or {}
+            filas_csv.append([
+                s.codigo, s.tipo,
+                d.get("titulo",""), d.get("organismo",""),
+                s.estado or "",
+                REGIONES_CHILE.get(s.region, "") if s.region else "",
+                s.monto_clp or "",
+                s.fecha_publicacion.strftime("%Y-%m-%d") if s.fecha_publicacion else "",
+                d.get("fecha_cierre",""),
+                "Si" if (s.region is not None) else "No",
+                d.get("link_detalle",""),
+            ])
 
     buf = io.StringIO()
     buf.write("\ufeff")   # BOM para Excel
@@ -757,19 +776,8 @@ def licitaciones_export_csv():
     writer.writerow(["Codigo","Tipo","Titulo","Organismo","Estado",
                      "Region","Monto_CLP","Fecha_Publicacion","Fecha_Cierre",
                      "Datos_Completos","Link"])
-    for s in snaps:
-        d = s.datos or {}
-        writer.writerow([
-            s.codigo, s.tipo,
-            d.get("titulo",""), d.get("organismo",""),
-            s.estado or "",
-            REGIONES_CHILE.get(s.region, "") if s.region else "",
-            s.monto_clp or "",
-            s.fecha_publicacion.strftime("%Y-%m-%d") if s.fecha_publicacion else "",
-            d.get("fecha_cierre",""),
-            "Si" if (s.region is not None) else "No",
-            d.get("link_detalle",""),
-        ])
+    for fila in filas_csv:
+        writer.writerow(fila)
 
     from flask import Response
     ts = _dt.now().strftime("%Y%m%d_%H%M")
@@ -800,3 +808,58 @@ def licitacion_detalle(snap_id: int):
             "enriquecido": snap.region is not None,
         }
     return render_template("licitacion_detalle.html", item=item, REGIONES_CHILE=REGIONES_CHILE)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ANÁLISIS DE PROPUESTA
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@bp.route("/licitaciones/<int:snap_id>/analizar")
+@requires_auth
+def licitacion_analizar(snap_id: int):
+    """Análisis estadístico completo + propuesta de oferta para una licitación."""
+    from app.bid_analyzer import bid_analyzer
+    import json as _json
+
+    costo_str = request.args.get("costo", "").strip()
+    costo     = int(costo_str) if costo_str.isdigit() else None
+
+    try:
+        analisis = bid_analyzer.analizar(snap_id, costo_propio=costo)
+    except ValueError:
+        abort(404)
+
+    # Serializar curva para Chart.js
+    curva_json = _json.dumps(analisis.bid_optimo.curva_precios)
+
+    return render_template(
+        "licitacion_analisis.html",
+        a=analisis,
+        curva_json=curva_json,
+        costo_input=costo or "",
+        snap_id=snap_id,
+    )
+
+
+@bp.route("/licitaciones/<int:snap_id>/analizar/json")
+@requires_auth
+def licitacion_analizar_json(snap_id: int):
+    """API JSON del análisis (para integración externa)."""
+    from app.bid_analyzer import bid_analyzer
+    import dataclasses, json as _json
+
+    costo_str = request.args.get("costo","").strip()
+    costo     = int(costo_str) if costo_str.isdigit() else None
+    try:
+        analisis = bid_analyzer.analizar(snap_id, costo_propio=costo)
+    except ValueError:
+        return jsonify({"error": "Licitación no encontrada"}), 404
+
+    def to_dict(obj):
+        if dataclasses.is_dataclass(obj):
+            return {k: to_dict(v) for k, v in dataclasses.asdict(obj).items()}
+        if isinstance(obj, list):
+            return [to_dict(i) for i in obj]
+        return obj
+
+    return jsonify(to_dict(analisis))
